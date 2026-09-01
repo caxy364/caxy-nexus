@@ -120,10 +120,6 @@ export const generateOAuthURL = async (prompt?: string) => {
 
         if (prompt) params.append('prompt', prompt);
 
-        // Optional: app_id check
-        const appId = '70505';
-        if (appId) params.append('app_id', appId);
-
         const finalUrl = `${authHost}?${params.toString()}`;
 
         console.log('[OAuth] Production URL:', finalUrl);
@@ -133,3 +129,4 @@ export const generateOAuthURL = async (prompt?: string) => {
         return '';
     }
 };
+
