@@ -1,0 +1,507 @@
+/* --- Global Container --- */
+.eliteflow-container {
+  background: #f8fafc;
+  color: #1e293b;
+  font-family: 'Inter', sans-serif;
+  padding: 10px;
+  height: 100vh;
+  
+  overflow: scroll;
+  padding-bottom: 200px;
+  width: calc(100vw - 400px);
+
+}
+.elite-header-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  background: #ffffff;
+  border-bottom: 2px solid #f1f5f9;
+}
+
+.brand-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.parent-brand {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #94a3b8;
+  letter-spacing: 2px;
+  margin-bottom: -4px;
+}
+
+.main-logo {
+  margin: 0;
+  font-size: 1.6rem;
+  letter-spacing: -1px;
+  display: flex;
+  align-items: center;
+}
+
+.text-bold {
+  color: #0f172a;
+  font-weight: 900;
+}
+
+.text-thin {
+  color: #3b82f6;
+  font-weight: 200;
+  margin-left: 2px;
+}
+
+/* Strategy Triple-Dot Status */
+.system-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.strategy-indicators {
+  display: flex;
+  gap: 5px;
+}
+
+.indicator-dot {
+  font-size: 0.6rem;
+  font-weight: 800;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #f1f5f9;
+  color: #94a3b8;
+  border: 1px solid #e2e8f0;
+}
+
+.indicator-dot.active {
+  background: #f0fff4;
+  color: #22c55e;
+  border-color: #22c55e;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.2);
+}
+
+.engine-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+
+/* --- Strategy Selection Grid --- */
+.strategy-selection-grid {
+  display: grid;
+  /* Force a single column so items stack vertically */
+  grid-template-columns: 1fr; 
+  /* Maintain consistent spacing between stacked items */
+  gap: 15px;
+  /* Keeps the grid centered and contained */
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+/* --- Strategy Cards --- */
+.strategy-card {
+  background: #ffffff;
+  backdrop-filter: blur(12px);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px;
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.strategy-card.active-tool {
+  border-color: #38bdf8;
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.card-header h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #0f172a;
+}
+
+.card-icon {
+  color: #38bdf8;
+  font-size: 1.2rem;
+}
+
+.strategy-description {
+  font-size: 1.1rem;
+  line-height: 1.4;
+  color: #64748b;
+  margin-bottom: 10px;
+  padding-left: 10px;
+  border-left: 3px solid #f1f5f9;
+}
+
+/* --- Market Matrix (The Scroll Container) --- */
+.matrix-scroll {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 5px;
+  width: 100%;
+  background: #fdfdfd;
+  border-radius: 8px;
+  border: 1px solid #f1f5f9;
+ 
+}
+
+/* --- Matrix Cards (Mini Individual Symbols) --- */
+.matrix-card {
+  flex: 1 1 calc(20% - 12px);
+  min-width: 0;
+  max-width: calc(20% - 12px);
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 5px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 4px 4px 10px #d1d9e6, -4px -4px 10px #ffffff;
+  transition: all 0.4s ease;
+  overflow: hidden;
+}
+
+.matrix-card.signal-active {
+  background: linear-gradient(145deg, #4ab466, #045e23);
+  border: 1px solid #22c55e;
+ 
+  box-shadow: 0 20px 25px -5px rgba(34, 197, 94, 0.2);
+}
+
+.matrix-badge {
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-bottom: 3px;
+  border: 1px solid #e2e8f0;
+  
+}
+
+.matrix-sym-text {
+  font-size:8px;
+  font-weight: 900;
+  color: #64748b;
+  text-shadow: 1px 1px 0px #fff;
+}
+
+/* --- Token Styling --- */
+.matrix-tokens-container {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  padding: 2px;
+  gap: 1px;
+}
+
+.token {
+  flex-shrink: 1;
+  width: 20px;
+  height: 20px;
+ 
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 900;
+  color: #ffffff;
+  position: relative;
+  background-image: linear-gradient(180deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0) 100%);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.token.mini {
+  width: 18px;
+  height: 18px;
+  font-size: 8px;
+}
+
+/* Token Colors */
+.token-even { background-color: #0ea516; border: 1.5px solid #2563eb; }
+.token-odd { background-color: #f50ba7; border: 1.5px solid #d97706; }
+.token-over { background-color: #098338; border: 1.5px solid #7c3aed; }
+.token-under { background-color: #a37b0d; border: 1.5px solid #64748b; }
+.token-rise { background-color: #10b981; border: 1.5px solid #059669; }
+.token-fall { background-color: #ef4444; border: 1.5px solid #dc2626; }
+
+.matrix-card.signal-active .token {
+  animation: token-glow 2s infinite alternate;
+}
+
+@keyframes token-glow {
+  from { filter: drop-shadow(0 0 2px #fff); transform: scale(1); }
+  to { filter: drop-shadow(0 0 8px rgba(255,255,255,0.9)); transform: scale(1.1); }
+}
+
+/* --- Configuration Grid --- */
+.mini-config-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+  margin-top: 10px;
+}
+
+.mini-input {
+  display: flex;
+  flex-direction: column;
+}
+
+.mini-input label {
+  font-size: 0.85rem;
+  color: #64748b;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+  font-weight: 700;
+}
+
+.mini-input input {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  color: #0f172a;
+  padding: 6px;
+  font-size: 0.95rem;
+  outline: none;
+}
+
+.mini-input input:focus {
+  border-color: #38bdf8;
+}
+
+/* --- Buttons --- */
+
+.card-action-btns{
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  
+
+}
+.launch-btn, .card-run-btn, .card-stop-btn, .switch-strategy-btn {
+  width: 60%;
+  padding: 10px;
+  border-radius: 6px;
+  border: none;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 0.1s;
+}
+
+.launch-btn { background: #38bdf8; color: #ffffff; }
+.card-run-btn { background: #22c55e; color: #ffffff; }
+.card-stop-btn { background: #ef4444; color: #ffffff; }
+.switch-strategy-btn { 
+  background: #798dae; 
+  color: #b3caeb; 
+  border: 1px solid #e2e8f0;
+  width: 40%;
+}
+.launch-btn{
+  width: 100%;
+}
+
+button:active { transform: scale(0.98); }
+
+/* --- Responsive Layout Adjustments --- */
+@media (max-width: 850px) {
+  .strategy-selection-grid { grid-template-columns: 1fr; }
+  .mini-config-grid { grid-template-columns: repeat(3, 1fr); }
+  
+  .matrix-card {
+    flex: 1 1 calc(25% - 12px);
+    max-width: calc(25% - 12px);
+  }
+}
+
+
+
+
+/* --- Desktop: Hidden by default --- */
+.mobile-signal-strip {
+    display: none;
+}
+
+.bot-status-elite {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    justify-content: center;
+}
+.bot-status-elite.idle {
+    color: #64748b;
+}
+.bot-status-elite.active {
+    color: #22c55e;
+}
+
+@media (max-width:800px) {
+    .eliteflow-container{
+      width: 100%;
+    }}
+/* --- Mobile Only (Phone screens) --- */
+@media (max-width: 768px) {
+  .eliteflow-container{
+    width: 100vw;
+    margin: 0 auto;
+  }
+    .mobile-signal-strip {
+        display: grid;
+        /* Forces exactly 2 rows */
+        grid-template-rows: repeat(2, 35px); 
+        /* Adjust columns based on N symbols */
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(70px, 1fr);
+        
+        gap: 2px;
+        padding: 4px 0;
+        overflow-x: auto; /* Allow horizontal swiping if many symbols */
+        width: 100%;
+        border-top: 1px solid #f1f5f9;
+        margin-top: 3px;
+    }
+
+    /* Target the mini version of the card */
+    .mobile-signal-strip .matrix-card {
+        flex: none; /* Override the desktop flex behavior */
+        max-width: none;
+        height: 32px; /* Super small height */
+        padding: 2px 4px;
+        flex-direction: column; /* Layout icon and tokens side-by-side */
+        gap: 3px;
+        box-shadow: 2px 2px 5px #d1d9e6; /* Shorter shadow for smaller cards */
+        border-radius: 3px;
+        border: 1px solid #3b82f6;
+        overflow: hidden;
+    }
+
+    /* Hide the symbol text or make it tiny */
+    .mobile-signal-strip .matrix-badge {
+        margin-bottom: -5px;
+        padding: 0 4px;
+        background: transparent;
+        border: none;
+        
+    }
+
+    .mobile-signal-strip .matrix-sym-text {
+        font-size: 7px;
+    }
+
+    /* Make tokens even smaller for the strip */
+    .mobile-signal-strip .token {
+        width: 15px;
+        height: 12px;
+       
+    }
+}
+
+
+
+
+
+/* --- Bot Status Elite --- */
+.bot-status-elite {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 20px;
+  transition: all 0.4s ease;
+  width: fit-content;
+  border: 1px solid transparent;
+  margin: 0 auto;
+}
+
+/* --- Idle State (Stagnant) --- */
+.bot-status-elite.idle {
+  color: #64748b;
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+.bot-status-elite.idle .status-dot {
+  width: 8px;
+  height: 8px;
+  background: #94a3b8;
+  border-radius: 50%;
+}
+
+/* --- Active State (Attracts Attention) --- */
+.bot-status-elite.active {
+  color: #059669; /* Deep emerald green */
+  background: #ecfdf5;
+  border-color: #10b981;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.2);
+}
+
+.bot-status-elite.active .status-dot {
+  width: 8px;
+  height: 8px;
+  background: #10b981;
+  border-radius: 50%;
+  position: relative;
+  /* Glowing Pulse Effect */
+  animation: status-pulse 1.5s infinite;
+}
+
+.bot-status-elite.active .status-dot::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: inherit;
+  border-radius: 50%;
+  animation: status-ripple 1.5s infinite;
+}
+
+/* --- Animations --- */
+@keyframes status-pulse {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { transform: scale(1.1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+@keyframes status-ripple {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(3); opacity: 0; }
+}
+
+/* Subtle text flicker for "Finding Patterns" */
+.bot-status-elite.active span:last-child {
+  animation: text-soft-glow 2s infinite alternate;
+}
+
+@keyframes text-soft-glow {
+  from { opacity: 0.8; }
+  to { opacity: 1; text-shadow: 0 0 8px rgba(16, 185, 129, 0.3); }
+}

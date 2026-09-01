@@ -1,0 +1,13 @@
+.app-header {
+    &__logo {
+        padding-inline-start: 3.2rem;
+        padding-inline-end: 2rem;
+        height: 32px;
+        display: flex;
+        align-items: center;
+
+        &-text {
+            margin-left: 8px;
+        }
+    }
+}

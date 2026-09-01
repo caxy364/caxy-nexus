@@ -1,0 +1,425 @@
+@use 'components/shared/styles/constants' as *;
+@use 'components/shared/styles/mixins' as *;
+
+.logo-section {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0px 15px;
+    /* Completely transparent background */
+    background: transparent;
+    /* Subtle blur ensures text doesn't clash with background patterns */
+    backdrop-filter: blur(4px);
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+.logo-section-mobile {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0px 15px;
+    /* Completely transparent background */
+    background: transparent;
+    /* Subtle blur ensures text doesn't clash with background patterns */
+    backdrop-filter: blur(4px);
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+
+.my-logo {
+    width: 60px;
+    height: 48px;
+    /* Adds a glow to the logo so it doesn't get lost on dark backgrounds */
+    filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.2));
+}
+.my-logo-mobile {
+    width: 50px;
+    height: 48px;
+    /* Adds a glow to the logo so it doesn't get lost on dark backgrounds */
+    filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.2));
+}
+
+.logo-section h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color:  var(--my-primary); /* Solid white for maximum visibility */
+    border: 1px solid  var(--icon-color);
+    padding: 5px 10px;
+    letter-spacing: 0.5px;
+    border-radius: 8px;
+}
+.logo-section-mobile h2{
+    font-size: 1.2rem;
+}
+
+/* The 'Classy' Modern Touch: An animated underline on hover */
+.logo-section::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #00ff83, transparent);
+    transition: width 0.4s ease;
+}
+
+.logo-section:hover::after {
+    width: 100%;
+}
+
+.logo-section:hover .my-logo {
+    transform: scale(1.05);
+    filter: drop-shadow(0 0 15px rgba(0, 255, 127, 0.5));
+}
+
+@media (max-width: 678px) {
+    .logo-section h2 {
+        display: none;
+    }
+}
+.app-header {
+    &__account-settings {
+        padding-inline-end: 1.2rem;
+        border-inline-end: 0.1rem solid var(--general-section-1);
+    }
+
+    &__account-settings,
+    .notifications__wrapper,
+    &__menu {
+        svg > path,
+        svg > g > path {
+            fill: var(--text-prominent);
+        }
+    }
+}
+
+.account-switcher {
+    &__item {
+        .deriv-account-switcher-item {
+            padding: 0.6rem 1.6rem;
+
+            &__detail {
+                .deriv-account-switcher-item__currency {
+                    margin-bottom: 2px;
+                    font-size: 1.4rem;
+                }
+            }
+
+            &__icon {
+                margin-right: unset;
+                margin-inline-end: 10px;
+            }
+        }
+
+        &--disabled {
+            opacity: 0.32;
+        }
+    }
+
+    &__separator:after {
+        background-color: var(--general-section-2);
+        content: '';
+        height: 4px;
+        position: absolute;
+        width: 100%;
+        z-index: 1;
+    }
+
+    &-footer {
+        background: var(--general-main-1);
+
+        &__actions {
+            display: flex;
+            justify-content: right;
+            align-items: center;
+            background-color: var(--du-general-main-2);
+            padding: 1.6rem 0.8rem;
+
+            &--hide-manage-button {
+                justify-content: flex-end;
+            }
+
+            .manage-button {
+                background: none;
+                border: 1px solid var(--button-secondary-default);
+                margin-inline-end: 0.7rem;
+                height: auto;
+                padding: 0.4rem 1.2rem;
+                white-space: break-spaces;
+
+                &:hover {
+                    background-color: unset !important;
+                }
+
+                span {
+                    color: var(--text-prominent);
+                    font-size: var(--text-size-xs);
+                    cursor: pointer;
+                    font-weight: 700;
+                }
+            }
+        }
+    }
+}
+
+.derivs-secondary-tabs {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--general-main-1);
+
+    .derivs-text__size--md {
+        font-size: 14px;
+        line-height: 18px;
+    }
+}
+
+.deriv-account-switcher {
+    &-item {
+        &__balance {
+            button {
+                border-width: 1px;
+                height: 2.4rem;
+                min-width: 4.8rem;
+
+                span {
+                    color: var(--text-prominent) !important;
+                }
+            }
+        }
+    }
+
+    &__button {
+        margin-inline-end: 0.8rem;
+
+        @include mobile-or-tablet-screen {
+            margin-inline-end: 0;
+        }
+
+        .deriv-context-menu {
+            box-shadow: 0 0 2px 0 var(--du-shadow-box, #00000014);
+        }
+
+        .deriv-account-switcher__balance + svg > path {
+            fill: var(--text-general);
+        }
+
+        &:hover {
+            background-color: unset;
+        }
+    }
+
+    &__currency {
+        margin-bottom: 2px;
+    }
+
+    &__icon {
+        margin-right: 7px;
+    }
+
+    &__balance {
+        padding: 0 1rem 0.1rem 0;
+    }
+
+    &__list {
+        &.account-switcher-panel {
+            padding: 0.4rem 0.8rem 0;
+
+            .account-switcher-panel__no-eu-accounts {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+
+                .add-button {
+                    background: none;
+
+                    span {
+                        color: #000;
+                        font-size: 12px;
+                        border: solid 2px var(--text-disabled-1);
+                        padding: 0.1rem 1.6rem;
+                        border-radius: 0.5em;
+                        cursor: pointer;
+                    }
+                }
+
+                .deriv-account-switcher-item {
+                    background: none;
+                }
+            }
+        }
+
+        .deriv-accordion {
+            &__content {
+                background: unset;
+                overflow: auto;
+            }
+
+            &__text {
+                margin-top: 0;
+            }
+
+            &__icon {
+                margin-left: unset;
+                margin-inline-start: auto;
+            }
+        }
+    }
+
+    &__title {
+        height: 4rem;
+        margin: 0 auto;
+        padding: 1.2rem 0.6rem;
+    }
+
+    &__container--mobile {
+        min-height: auto;
+        max-width: 600px;
+    }
+
+    &__container {
+        max-height: 80vh;
+        overflow: auto;
+        background: var(--general-main-1);
+        background-color: var(--general-main-2);
+        border-radius: 4px;
+        box-shadow: 0 8px 16px 0 var(--shadow-menu) !important;
+        position: absolute;
+        transition:
+            transform 0.3s ease,
+            opacity 0.25s linear;
+        width: 320px;
+        top: 55px;
+        right: unset;
+        inset-inline-end: 0;
+    }
+
+    &__tradershub-link {
+        background: var(--du-general-main-2);
+        color: var(--text-prominent);
+        padding: 1rem;
+        display: flex;
+        justify-content: center;
+    }
+
+    &__footer {
+        padding: 0;
+        display: block;
+    }
+}
+
+.languages-modal {
+    background: var(--general-section-1);
+
+    .deriv-modal__header {
+        border-bottom: 2px solid var(--general-section-5);
+    }
+
+    .deriv-modal__close-icon {
+        path {
+            fill: var(--text-prominent);
+        }
+    }
+
+    .deriv-text {
+        color: var(--text-prominent) !important;
+    }
+}
+
+.auth-actions {
+    display: flex;
+    padding-block: 8px;
+    align-items: center;
+
+    button {
+        font-weight: 400;
+        margin-inline-end: 1.6rem;
+        border-radius: 16px;
+    }
+
+    &--loading {
+        align-items: center;
+        margin-inline-end: 1.6rem;
+    }
+
+    &__spinner {
+        width: 2rem;
+        height: 2rem;
+        color: var(--text-prominent);
+        animation: auth-spinner-rotate 0.8s linear infinite;
+    }
+}
+
+.deriv-accordion--underline {
+    border-bottom: none;
+}
+
+@keyframes auth-spinner-rotate {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Container for alignment */
+.auth-actions {
+    display: flex;
+    align-items: center;
+    gap: 0px;
+}
+
+/* Universal styles for both buttons to maintain 'Minimal Height' */
+.auth-actions .login-btn,
+.auth-actions .signup-btn {
+    height: 27px !important; /* Forces a slim, modern height */
+    padding: 0 13px !important;
+    font-size: 1.4rem !important;
+    font-weight: 700 !important;
+    border-radius: 4px !important;
+    text-transform: none; /* Keeps it modern and readable */
+    transition: all 0.25s ease !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    cursor: pointer;
+}
+
+/* LOGIN BUTTON: The 'Tertiary' Glass Look */
+.auth-actions .login-btn {
+    background: transparent !important;
+    color:  var(--my-primary);
+    border: 1px solid var(--my-primary);
+}
+
+.auth-actions .login-btn:hover {
+    background: rgba(159, 179, 240, 0.836) !important;
+   transform: translateY(-1px);
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+}
+
+/* SIGN UP BUTTON: The 'Primary' Success Look */
+.auth-actions .signup-btn {
+    background-color: var(--my-primary); /* Trading Green */
+    color: #ffff !important; /* Contrast against dark blue theme */
+    box-shadow: 0 2px 10px rgba(0, 255, 131, 0.15);
+}
+
+.auth-actions .signup-btn:hover {
+    background-color: #4441cf !important;
+    box-shadow: 0 4px 20px rgba(0, 255, 131, 0.4);
+    transform: translateY(-1px); /* Tactile lift effect */
+}
+
+/* Active state for a 'clicked' feel */
+.auth-actions .signup-btn:active {
+    transform: translateY(0);
+}

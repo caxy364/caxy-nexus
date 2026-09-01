@@ -1,0 +1,895 @@
+.epf-shell,
+.epf-monitor-grid {
+    --epf-page: #f4f7fb;
+    --epf-surface: #ffffff;
+    --epf-surface-soft: #f8fbff;
+    --epf-surface-accent: #eef5ff;
+    --epf-border: #dbe6f2;
+    --epf-border-strong: #c9d9ea;
+    --epf-text: #16324f;
+    --epf-text-muted: #5e7794;
+    --epf-text-faint: #7e94ad;
+    --epf-accent: #1778f2;
+    --epf-accent-soft: #eaf3ff;
+    --epf-success: #078697;
+    --epf-success-soft: #e8faf2;
+    --epf-danger: #d95f72;
+    --epf-danger-soft: #fff0f3;
+    --epf-warning: #c6811d;
+    --epf-warning-soft: #fff4e4;
+    --epf-shadow: 0 18px 44px rgba(23, 54, 91, 0.08);
+    --epf-card-shadow: 0 10px 24px rgba(23, 54, 91, 0.06);
+    --epf-radius-xl: 17px;
+    --epf-radius-lg: 13px;
+    --epf-radius-md: 10px;
+    --epf-radius-sm: 7px;
+    --epf-font: 'Space Grotesk', 'Segoe UI', sans-serif;
+    --epf-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+}
+
+.epf-shell {
+    /* 1. Set the dynamic width */
+    width: calc(100vw - 400px);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: scroll;
+    padding: clamp(14px, 2vw, 20px);
+    border: 1px solid var(--epf-border);
+
+    background:
+        radial-gradient(circle at top right, rgba(23, 120, 242, 0.06), transparent 28%),
+        radial-gradient(circle at bottom left, rgba(18, 150, 103, 0.05), transparent 24%),
+        linear-gradient(180deg, #fbfdff 0%, var(--epf-page) 100%);
+    box-shadow: var(--epf-shadow);
+    color: var(--epf-text);
+    font-family: var(--epf-font);
+    padding-bottom: 200px;
+    padding-top: 5px;
+}
+
+.epf-hero {
+    padding: 14px;
+
+    border-bottom: 1px solid #e2e8f0;
+    text-align: center;
+    width: 90%;
+    margin: 0 auto;
+    padding-top: 0px;
+}
+
+/* Title: Bold, tight, and professional */
+.epf-hero__title {
+    font-family: 'Inter', sans-serif;
+    font-size: 28px;
+    font-weight: 900;
+    letter-spacing: -0.04em;
+    color: #0f172a; /* Slate 900 */
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+/* The AI Accent: A glowing "chip" look */
+.epf-hero__accent {
+    background: linear-gradient(135deg, #078697, #06b6d4);
+    color: #ffffff;
+    padding: 2px 10px;
+    border-radius: 6px;
+    font-size: 18px;
+    letter-spacing: 0.05em;
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
+/* Description: Crisp and informative */
+.epf-hero__description {
+    font-size: 14px;
+    line-height: 1.6;
+    color: #64748b; /* Slate 500 */
+    max-width: 700px;
+    margin: 0 auto;
+}
+
+/* Highlighted Logic Example */
+.epf-hero__description strong {
+    color: #0f172a;
+    background: #f1f5f9;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace; /* Connects with strategy font */
+    font-size: 13px;
+}
+
+/* Responsive: Shrink font slightly for mobile */
+@media (max-width: 640px) {
+    .epf-hero {
+        width: 100%;
+    }
+
+    .epf-hero__title {
+        font-size: 18px;
+    }
+
+    .epf-hero__accent {
+        font-size: 14px;
+    }
+
+    .epf-hero__description {
+        font-size: 12px;
+        line-height: 1.2;
+    }
+}
+
+/* Container - 4 columns on PC, 2x2 on Mobile */
+.epf-settings-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    padding: 14px;
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 1px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+/* Field: Stacked Column Layout */
+.epf-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* Label: Uppercase and crisp */
+.epf-field__label {
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding-left: 2px;
+}
+
+/* Control: Designed to look like a classic UI input */
+.epf-field__control {
+    width: 100%;
+    height: 32px; /* Fixed height for consistency */
+    padding: 0 10px;
+    background-color: #f8fafc; /* Slight contrast from white background */
+    border: 1px solid #86b9f7a9; /* Visible border so it looks like a box */
+    /* Heavier bottom border for "input" look */
+    border-radius: 1px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: #1e293b;
+    outline: none;
+    transition: all 0.15s ease-in-out;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05); /* Inner shadow for depth */
+}
+
+/* Focus State: High contrast to show active editing */
+.epf-field__control:focus {
+    background-color: #ffffff;
+    border-color: #6366f1;
+
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    color: #000000;
+}
+
+/* Standout Color Accents on the bottom border */
+
+/* Disabled state */
+.epf-field__control:disabled {
+    background-color: #f1f5f9;
+    border-color: #e2e8f0;
+    border-bottom-color: #e2e8f0;
+    color: #94a3b8;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* Container - Simple 2-column split */
+.epf-status-grid {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 10px auto;
+}
+/* Responsive Handling */
+@media (max-width: 768px) {
+    .epf-settings-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+@media (max-width: 600px) {
+    .epf-status-grid {
+        display: flex;
+        flex-direction: column;
+    }
+}
+
+/* The Status Card: Clean and "Live" */
+.epf-status-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 8px 14px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #cbd5e1; /* Subtle accent bar */
+    border-radius: 8px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+/* Specific styling for the 'Status' card to make it feel active */
+.epf-status-card:first-child {
+    border-left-color: #3b82f6; /* Blue for general status */
+}
+
+/* Specific styling for 'Last Signal' to make it feel data-driven */
+.epf-status-card:last-child {
+    border-left-color: #8b5cf6; /* Purple for signal */
+}
+
+/* Label: Muted and professional */
+.epf-status-card__label {
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 2px;
+}
+
+/* Value: Bold and standout */
+.epf-status-card__value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: #1e293b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Optional: Pulse animation for the Status value if "Running" */
+.epf-status-card__value:contains('Running') {
+    color: #10b981;
+}
+
+/* --- 1. Main Panel Structure --- */
+.epf-panel {
+    background: #ffffff;
+    border: 1px solid #62d4f770;
+    border-radius: 12px;
+    margin-top: 13px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    padding: 5px;
+}
+
+.epf-panel__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 16px;
+    background: #f8fafc;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.epf-panel__title {
+    font-size: 11px;
+    font-weight: 800;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.epf-panel__title span {
+    color: #078697;
+}
+
+/* --- 2. Strategy List & Distinct Backgrounds --- */
+.epf-strategy-list {
+    display: flex;
+    flex-direction: column;
+    padding: 6px;
+    gap: 4px;
+}
+
+.epf-strategy-card {
+    padding: 8px 14px;
+    border-radius: 8px;
+    transition: transform 0.2s ease;
+}
+
+.epf-strategy-card:nth-child(5n + 1) {
+    background: #f0f7ff;
+    border: 1px solid #2db9f031;
+}
+.epf-strategy-card:nth-child(5n + 2) {
+    background: #fdf2f8;
+    border: 1px solid #672df031;
+}
+.epf-strategy-card:nth-child(5n + 3) {
+    background: #f0fdf4;
+    border: 1px solid #2df06731;
+}
+.epf-strategy-card:nth-child(5n + 4) {
+    background: #fff7ed;
+    border: 1px solid #f0d32d31;
+}
+.epf-strategy-card:nth-child(5n + 5) {
+    background: #f5f3ff;
+    border: 1px solid #b92df031;
+}
+
+.epf-strategy-card__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+/* Meta Container - Tight row */
+.epf-strategy-card__meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+/* Strategy ID */
+.epf-strategy-card__name {
+    font-size: 11px;
+    font-weight: 800;
+    color: #078697;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+/* Rule Type Tag */
+.epf-strategy-card__type {
+    font-size: 9px;
+    font-weight: 700;
+    color: #94a3b8;
+    background: rgba(255, 255, 255, 0.4);
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    text-transform: uppercase;
+}
+
+/* Color coding based on the new classes */
+.epf-strategy-card__type.type--market {
+    color: #f63bcecb; /* Blue for Market */
+    background: #eff6ff;
+    border-color: #dbeafe;
+}
+
+.epf-strategy-card__type.type--digit {
+    color: #3fa0fcaf; /* Purple for Digit */
+    background: #f5f3ff;
+    border-color: #ede9fe;
+}
+/* --- 3. The Logic Row (Perfect Alignment) --- */
+.epf-strategy-rule {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    align-items: center; /* Vertical Center */
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.epf-strategy-rule__text {
+    font-size: 12px;
+    font-weight: 600;
+    color: #334155;
+    display: flex;
+    align-items: center;
+    text-transform: uppercase;
+}
+
+/* --- 4. Small Premium Inputs & Selects --- */
+.epf-strategy-rule__control {
+    height: 24px;
+    padding: 0 4px;
+    background: #ffffff;
+    border: 1px solid rgba(23, 183, 247, 0.459); /* Clean standard border, no bottom-heavy look */
+    border-radius: 7px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 800;
+    outline: none;
+    transition: all 0.2s ease;
+
+    /* Text Centering */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    text-align-last: center; /* Specific for <select> centering on some browsers */
+}
+
+/* Very small widths as requested */
+.epf-strategy-rule__control--lookback,
+.epf-strategy-rule__control--barrier {
+    width: 45px;
+    color: #4b7dce;
+}
+
+.epf-strategy-rule__control--condition {
+    width: 80px; /* Minimized width */
+    color: #7807b9;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 4px center;
+    background-size: 12px;
+}
+
+.epf-strategy-rule__control--trade {
+    width: 80px; /* Minimized width */
+    color: #059669;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 4px center;
+    background-size: 12px;
+}
+
+.epf-strategy-rule__control:focus {
+    border-color: #94a3b8;
+    background: #fff;
+}
+
+/* --- 5. Professional Trading Buttons --- */
+.epf-button {
+    font-family: 'Inter', sans-serif;
+    font-size: 9px;
+    font-weight: 800;
+    padding: 7px 10px;
+    border-radius: 7px;
+    cursor: pointer;
+    text-transform: uppercase;
+    border: none;
+    transition: all 0.2s ease;
+}
+
+/* Greenish Add Button */
+.epf-button--secondary {
+    background-color: #078697;
+    color: #ffffff;
+    box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
+}
+
+.epf-button--secondary:hover:not(:disabled) {
+    background-color: #059669;
+}
+
+/* Reddish Remove Button */
+.epf-button--danger {
+    background-color: #ef4444;
+    color: #ffffff;
+    padding: 3px 8px;
+}
+
+.epf-button--danger:hover:not(:disabled) {
+    background-color: #dc2626;
+}
+
+.epf-button:disabled {
+    background-color: #e2e8f0;
+    color: #94a3b8;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* Clean Select (No Arrow Clutter) */
+select.epf-strategy-rule__control {
+    appearance: none;
+    padding: 0 2px;
+    cursor: pointer;
+}
+
+/* Container - Centers the button and adds vertical breathing room */
+.epf-cta-row {
+    display: flex;
+    justify-content: center;
+    padding: 7px 0;
+    width: 100%;
+    margin-top: 10px;
+}
+
+/* The Primary Action Button */
+.epf-button--primary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+
+    /* Size & Shape */
+    width: 50%;
+    min-width: 240px;
+    height: 38px;
+    border-radius: 8px;
+    border: none;
+
+    /* Typography */
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+
+    /* Look: Deep Emerald / Execution Green */
+    background: linear-gradient(135deg, #078697 0%, #078697 100%);
+    color: #ffffff;
+
+    /* Depth & Shadow */
+    box-shadow:
+        0 4px 0px #047857,
+        /* Bottom "3D" edge */ 0 10px 20px rgba(16, 185, 129, 0.2);
+
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    top: 0;
+}
+
+/* Hover: Slight lift and glow */
+.epf-button--primary:hover:not(:disabled) {
+    top: -2px;
+    filter: brightness(1.05);
+    box-shadow:
+        0 6px 0px #047857,
+        0 15px 25px rgba(16, 185, 129, 0.3);
+}
+
+/* Active / Press: Pushes down like a real button */
+.epf-button--primary:active:not(:disabled) {
+    top: 3px;
+    box-shadow:
+        0 1px 0px #047857,
+        0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+/* STOP State: Aggressive Red */
+.epf-button--stop {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+    box-shadow:
+        0 4px 0px #b91c1c,
+        0 10px 20px rgba(239, 68, 68, 0.2);
+}
+
+.epf-button--stop:hover:not(:disabled) {
+    box-shadow:
+        0 6px 0px #b91c1c,
+        0 15px 25px rgba(239, 68, 68, 0.3);
+}
+
+/* Icon styling */
+.epf-button--primary svg {
+    font-size: 16px;
+    filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.1));
+}
+
+/* Execution Pulse - makes the "Start" button "breath" to attract the eye */
+@keyframes pulse-green {
+    0% {
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+    }
+}
+
+.epf-button--primary:not(.epf-button--stop):not(:disabled) {
+    animation: pulse-green 2s infinite;
+}
+
+.epf-monitor-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.epf-monitor-grid--journal {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 8px;
+    padding: 10px;
+    overflow: scroll;
+    max-height: 150px;
+}
+
+.epf-monitor-card {
+    padding: 8px 9px;
+    transition:
+        transform 0.2s ease,
+        border-color 0.2s ease,
+        box-shadow 0.2s ease;
+
+    border-radius: 6px;
+    border: 1px solid rgba(0, 162, 255, 0.205);
+}
+
+.epf-monitor-card--journal {
+    padding: 6px;
+    border-radius: 12px;
+    box-shadow: none;
+}
+
+.epf-monitor-card--active {
+    border-color: #bfe7d4;
+    box-shadow: 0 10px 20px rgba(18, 150, 103, 0.1);
+    background-color: #1bd39fa2;
+}
+
+.epf-monitor-card__top,
+.epf-monitor-card__row,
+.epf-result-card__top,
+.epf-result-card__middle,
+.epf-result-card__bottom {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.epf-monitor-card__top {
+    margin-bottom: 6px;
+}
+
+.epf-monitor-grid--journal .epf-monitor-card__top {
+    margin-bottom: 4px;
+    gap: 4px;
+}
+
+.epf-monitor-card__symbol {
+    color: var(--epf-text);
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.epf-monitor-grid--journal .epf-monitor-card__symbol {
+    font-size: 0.62rem;
+    letter-spacing: 0.02em;
+}
+
+.epf-monitor-card__tag {
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: var(--epf-accent-soft);
+    color: var(--epf-accent);
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.epf-monitor-grid--journal .epf-monitor-card__tag {
+    padding: 2px 5px;
+    font-size: 0.5rem;
+    letter-spacing: 0.08em;
+}
+
+.epf-monitor-card__row + .epf-monitor-card__row {
+    margin-top: 5px;
+}
+
+.epf-monitor-grid--journal .epf-monitor-card__row + .epf-monitor-card__row {
+    margin-top: 4px;
+}
+
+.epf-monitor-card__label {
+    width: 34px;
+    flex-shrink: 0;
+    font-size: 0.58rem;
+}
+
+.epf-monitor-grid--journal .epf-monitor-card__label {
+    width: 26px;
+    font-size: 0.5rem;
+}
+
+.epf-token-stream {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 4px;
+}
+
+.epf-monitor-grid--journal .epf-token-stream {
+    gap: 2px;
+}
+
+.epf-token {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 5px;
+    border-radius: 8px;
+    font-family: var(--epf-mono);
+    font-size: 0.68rem;
+    font-weight: 700;
+    border: 1px solid transparent;
+}
+
+.epf-monitor-grid--journal .epf-token {
+    min-width: 14px;
+    height: 14px;
+    padding: 0 3px;
+    border-radius: 5px;
+    font-size: 0.48rem;
+}
+
+.epf-token--digit-high {
+    border-color: #f4d7aa;
+    background: var(--epf-warning-soft);
+    color: var(--epf-warning);
+}
+
+.epf-token--digit-low {
+    border-color: #cfe2fb;
+    background: var(--epf-accent-soft);
+    color: var(--epf-accent);
+}
+
+.epf-token--rise {
+    border-color: #cce9dc;
+    background: var(--epf-success-soft);
+    color: var(--epf-success);
+}
+
+.epf-token--fall {
+    border-color: #f1d2d9;
+    background: var(--epf-danger-soft);
+    color: var(--epf-danger);
+}
+
+.epf-token--flat,
+.epf-token--empty {
+    border-color: #dde6ef;
+    background: #f3f6fa;
+    color: var(--epf-text-faint);
+}
+
+.epf-results-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.epf-result-card,
+.epf-empty-state {
+    padding: 12px;
+}
+
+.epf-result-card__top {
+    margin-bottom: 8px;
+}
+
+.epf-result-card__top strong {
+    color: var(--epf-text);
+    font-size: 0.86rem;
+}
+
+.epf-result-card__middle,
+.epf-result-card__bottom {
+    color: var(--epf-text-muted);
+    font-size: 0.8rem;
+}
+
+.epf-result-card__middle {
+    margin-bottom: 6px;
+}
+
+.epf-result-card__state {
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: #f2f6fb;
+    color: var(--epf-text-muted);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.epf-result-card__state--win {
+    background: var(--epf-success-soft);
+    color: var(--epf-success);
+}
+
+.epf-result-card__state--loss {
+    background: var(--epf-danger-soft);
+    color: var(--epf-danger);
+}
+
+.epf-result-card__value--profit {
+    color: var(--epf-success);
+    font-weight: 700;
+}
+
+.epf-result-card__value--loss {
+    color: var(--epf-danger);
+    font-weight: 700;
+}
+
+.epf-empty-state {
+    grid-column: 1 / -1;
+    color: var(--epf-text-muted);
+    line-height: 1.55;
+    text-align: center;
+}
+
+@media screen and (max-width: 1240px) {
+    .epf-settings-grid,
+    .epf-summary-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .epf-monitor-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .epf-results-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media screen and (max-width: 980px) {
+    .epf-settings-grid,
+    .epf-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .epf-monitor-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .epf-monitor-grid--journal {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media screen and (max-width: 720px) {
+    .epf-shell {
+        padding: 12px;
+        border-radius: 18px;
+        width: 95%;
+        margin: 5 auto;
+
+        padding-bottom: 200px;
+    }
+
+    .epf-result-card__top,
+    .epf-result-card__middle,
+    .epf-result-card__bottom {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .epf-monitor-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .epf-monitor-grid--journal {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .epf-button--primary {
+        width: 90%;
+        margin-top: -10px;
+        font-size: 13px;
+    }
+}
