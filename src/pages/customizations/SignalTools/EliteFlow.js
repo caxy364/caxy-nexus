@@ -23,7 +23,7 @@ import { contract_stages } from '@/constants/contract-stage';
 import { run_panel as run_panel_tabs } from '@/constants/run-panel';
 import { observer } from '@/external/bot-skeleton';
 import { useStore } from '@/hooks/useStore';
-import './Eliteflow.css';
+import './EliteFlow.css';
 
 const SYMBOLS = ['1HZ10V', 'R_10', '1HZ25V', 'R_25', '1HZ50V', 'R_50', '1HZ75V', 'R_75', '1HZ100V', 'R_100'];
 
