@@ -70,7 +70,7 @@ export const useOAuthCallback = (): OAuthCallbackResult => {
         url.searchParams.delete('scope');
         url.searchParams.delete('error');
         url.searchParams.delete('error_description');
-        window.history.replaceState({}, '', url.toString());
+        window.history.replaceState({}, '', '/');
     }, []);
 
     useEffect(() => {
