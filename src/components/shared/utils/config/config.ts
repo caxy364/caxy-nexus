@@ -1,4 +1,4 @@
-import { DerivWSAccountsService } from '@/services/derivws-accounts.service';
+﻿import { DerivWSAccountsService } from '@/services/derivws-accounts.service';
 import { OAuthTokenExchangeService } from '@/services/oauth-token-exchange.service';
 import brandConfig from '../../../../../brand.config.json';
 
@@ -71,8 +71,19 @@ export const storeCSRFToken = (token: string) => {
 
 export const validateCSRFToken = (token: string): boolean => {
     const storedToken = sessionStorage.getItem('oauth_csrf_token');
+
+    console.log('[OAuth CSRF DEBUG]', {
+        currentOrigin: window.location.origin,
+        currentPath: window.location.pathname,
+        returnedState: token,
+        storedState: storedToken,
+        statesMatch: storedToken === token,
+        hasStoredState: !!storedToken,
+        hasCodeVerifier: !!sessionStorage.getItem('oauth_code_verifier'),
+    });
+
     if (!storedToken) return false;
-    // Direct comparison for callback validation
+
     return storedToken === token;
 };
 
@@ -129,4 +140,5 @@ export const generateOAuthURL = async (prompt?: string) => {
         return '';
     }
 };
+
 
