@@ -299,7 +299,7 @@ const AppWrapper = observer(() => {
         } else {
             // Preserve URL parameters when navigating
             const currentSearch = window.location.search;
-            navigate(`${currentSearch}#${hash[active_tab] || hash[0]}`);
+            navigate(`/${currentSearch}#${hash[active_tab] || hash[0]}`, { replace: true });
         }
         if (active_tour !== '') {
             setActiveTour('');
