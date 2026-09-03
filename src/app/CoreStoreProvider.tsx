@@ -5,6 +5,7 @@ import { toMoment } from '@/components/shared';
 import { FORM_ERROR_MESSAGES } from '@/components/shared/constants/form-error-messages';
 import { initFormErrorMessages } from '@/components/shared/utils/validation/declarative-validation-rules';
 import { api_base } from '@/external/bot-skeleton';
+import { setAccountList } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
 import { useApiBase } from '@/hooks/useApiBase';
 import { useLogout } from '@/hooks/useLogout';
 import { useStore } from '@/hooks/useStore';
@@ -135,12 +136,32 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
             }
 
             if (msg_type === 'balance' && data && !error) {
-                const balance = data.balance;
-                if (balance && typeof balance.balance === 'number') {
-                    client.setBalance(balance.balance.toString());
+    const balance = data.balance;
 
-                    if (balance.currency) {
-                        client.setCurrency(balance.currency);
+    if (balance && typeof balance.balance === 'number') {
+        client.setBalance(balance.balance.toString());
+
+        if (balance.currency) {
+            client.setCurrency(balance.currency);
+        }
+
+        const currentLoginid = balance.loginid || activeLoginid || client.loginid;
+
+        if (currentLoginid && accountList?.length) {
+            const updatedAccountList = accountList.map(account =>
+                account.loginid === currentLoginid
+                    ? {
+                          ...account,
+                          balance: balance.balance,
+                          currency: balance.currency || account.currency,
+                      }
+                    : account
+            );
+
+            setAccountList(updatedAccountList);
+
+
+
                     }
                 }
             }

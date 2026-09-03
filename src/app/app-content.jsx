@@ -123,9 +123,10 @@ const AppContent = observer(() => {
         const retrieveActiveSymbols = () => {
             const { active_symbols } = ApiHelpers.instance;
 
-            active_symbols.retrieveActiveSymbols(true).then(() => {
-                setIsLoading(false);
+            active_symbols.retrieveActiveSymbols(true).catch(error => {
+                console.error('Failed to retrieve active symbols:', error);
             });
+            setIsLoading(false);
         };
 
         if (ApiHelpers?.instance?.active_symbols) {

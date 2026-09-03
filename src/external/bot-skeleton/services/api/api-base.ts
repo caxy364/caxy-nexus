@@ -297,8 +297,8 @@ class APIBase {
                     ? storedAccounts
                           .filter(a => !a.status || a.status === 'active')
                           .map(a => ({
-                              balance: parseFloat(a.balance) || 0,
-                              currency: a.currency || 'USD',
+                              balance: a.account_id === balance?.loginid ? balance.balance : parseFloat(a.balance) || 0,
+                              currency: a.account_id === balance?.loginid ? balance.currency || a.currency || 'USD' : a.currency || 'USD',
                               is_virtual: a.account_type === 'demo' ? 1 : 0,
                               loginid: a.account_id,
                           }))
@@ -307,6 +307,7 @@ class APIBase {
                       : [];
 
             setAccountList(accountList); // Observable stream
+
             setAuthData({
                 balance: balance?.balance,
                 currency: balance?.currency,
