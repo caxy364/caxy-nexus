@@ -22,9 +22,9 @@ const MenuHeader = ({ hideLanguageSetting, openLanguageSetting }: TMenuHeader) =
             {/* [AI] Show brand logo instead of "Menu" text 
             <BrandLogo width={100} height={28} fill='var(--text-general)' />*/}
            <div className='logo-section-mobile'>
-                                   <img src={MyLogo} alt='360 Trading Hub Logo' className='my-logo-mobile' />
+                                   <img src={MyLogo} alt='TurboPrint Trading Hub Logo' className='my-logo-mobile' />
                                    <h2>
-                                       360 <span>Trading Hub</span>
+                                       TurboPrint <span>Trading Hub</span>
                                    </h2>
                                </div>
 

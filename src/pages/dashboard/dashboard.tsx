@@ -58,7 +58,7 @@ const DashboardComponent = observer(({ handleTabChange }: TMobileIconGuide) => {
                                 className={classNames('subtitle', { 'subtitle__has-list': has_dashboard_strategies })}
                             >
                                 {localize(
-                                    'Welcome to 360 Trading Hub. Serving your trading needs for more than 3 years and still strong with more advanced tools & Bots.'
+                                    'Welcome to TurboPrint Trading Hub. Serving your trading needs for more than 3 years and still strong with more advanced tools & Bots.'
                                 )}
                             </Text>
                         </div>
