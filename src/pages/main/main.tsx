@@ -95,6 +95,7 @@ const AppWrapper = observer(() => {
         'smart_trader',
         'chart',
         'tutorial',
+        'dtrader',
     ];
     const { isDesktop } = useDevice();
     const location = useLocation();
@@ -523,6 +524,21 @@ const AppWrapper = observer(() => {
                                     </Suspense>
                                 </div>
                             </div>
+                                                    <div
+                                label={
+                                    <>
+                                        <Localize i18n_default_text='DTrader' />
+                                    </>
+                                }
+                                id='id-dtrader'
+                            >
+                                <div className='dtrader-wrapper'>
+                                    <div style={{ padding: '40px', textAlign: 'center' }}>
+                                        <h2>DTrader</h2>
+                                        <p>Native DTrader will be mounted here.</p>
+                                    </div>
+                                </div>
+                            </div>
                         </Tabs>
                         {!isDesktop && right_tab_shadow && <span className='tabs-shadow tabs-shadow--right' />}{' '}
                     </div>
@@ -605,3 +621,7 @@ const AppWrapper = observer(() => {
 });
 
 export default AppWrapper;
+
+
+
+
