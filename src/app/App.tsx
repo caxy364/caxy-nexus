@@ -54,6 +54,7 @@ const router = createBrowserRouter(
         >
             {/* All child routes will be passed as children to Layout */}
             <Route index element={<AppRoot />} />
+            <Route path='callback' element={<AppRoot />} />
         </Route>
     )
 );
