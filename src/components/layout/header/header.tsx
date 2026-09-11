@@ -246,9 +246,9 @@ const AppHeader = observer(() => {
                     <MobileMenu onLogout={handleLogout} />
                     {shouldShowLogoSection && (
                         <div className='logo-section'>
-                            <img src={MyLogo} alt='360 Trading Hub Logo' className='my-logo' />
+                            <img src={MyLogo} alt='Turbo Print Pro Hub Logo' className='my-logo' />
                             <h2>
-                                360 <span>Trading Hub</span>
+                                Turbo Print Pro Hub
                             </h2>
                         </div>
                     )}
