@@ -88,14 +88,14 @@ const PAIR_CONFIGS = {
     },
     HIGHER_LOWER: {
         label: 'Higher / Lower',
-        description: 'The two legs use symmetrical offsets: Higher uses +offset and Lower uses -offset from entry.',
+        description: 'Both legs use one shared barrier from entry (enter a negative value for a barrier below entry): Higher wins above it, Lower wins below it.',
         durationUnits: ['t', 'm'],
         fields: [
             { key: 'duration', label: 'Duration', type: 'number', min: 2, step: 1 },
-            { key: 'barrierOffset', label: 'Barrier offset', type: 'number', step: 'any' },
+            { key: 'barrier', label: 'Barrier offset', type: 'number', step: 'any' },
         ],
-        defaults: { duration: '5', barrierOffset: '0.1' },
-        barrierMode: 'directional',
+        defaults: { duration: '5', barrier: '0.1' },
+        barrierMode: 'single',
         legs: {
             A: { label: 'Higher', contractType: 'HIGHER' },
             B: { label: 'Lower', contractType: 'LOWER' },
@@ -138,7 +138,7 @@ const formatSignedOffset = (value, forcedSign) => {
 };
 const getBarrierCount = config => {
     if (config.barrierMode === 'range') return 2;
-    if (config.barrierMode === 'single' || config.barrierMode === 'directional') return 1;
+    if (config.barrierMode === 'single') return 1;
     return 0;
 };
 const getContractAvailability = (availableContracts, contractType, durationUnit, duration, requiredBarrierCount) => {
@@ -186,6 +186,9 @@ const preparePairParameters = ({ config, settings, durationUnit, pipSize }) => {
         result.selectedTick = selectedTick;
     }
     if (config.barrierMode === 'single') {
+        // Higher/Lower and Touch/No Touch share ONE barrier between both legs, with
+        // its sign taken exactly as the trader entered it (matches SmartTrader: a
+        // single barrier value, positive or negative, applied to both contracts).
         result.barrier = getSynchronizedOffset(settings.barrier, pipSize);
     }
     if (config.barrierMode === 'range') {
@@ -203,10 +206,6 @@ const preparePairParameters = ({ config, settings, durationUnit, pipSize }) => {
         ) {
             return { error: 'Aligned high barrier must remain greater than the aligned low barrier.' };
         }
-    }
-    if (config.barrierMode === 'directional') {
-        result.barrier = getSynchronizedOffset(settings.barrierOffset, pipSize, '+');
-        result.barrier2 = getSynchronizedOffset(settings.barrierOffset, pipSize, '-');
     }
     if (config.barrierMode && (!result.barrier || (config.barrierMode === 'range' && !result.barrier2))) {
         return {
@@ -1167,12 +1166,12 @@ const PairedBot = () => {
                             duration: prepared.duration,
                             durationUnit: prepared.durationUnit,
                             selectedTick: prepared.selectedTick,
-                            barrier:
-                                config.barrierMode === 'directional'
-                                    ? key === 'A'
-                                        ? prepared.barrier
-                                        : prepared.barrier2
-                                    : prepared.barrier,
+                            // Both legs of a pair always share the exact same barrier(s):
+                            // Higher/Lower and Touch/No Touch use one barrier for both
+                            // legs (its sign is whatever the trader entered); Ends
+                            // Between/Ends Outside and Stays Between/Goes Outside use
+                            // the same high (+) / low (-) barrier pair for both legs.
+                            barrier: prepared.barrier,
                             barrier2: config.barrierMode === 'range' ? prepared.barrier2 : null,
                         })
                     )
@@ -1434,12 +1433,6 @@ const PairedBot = () => {
                             {preparedPreview?.barrier || formatSignedOffset(pairSettings.barrier)}
                         </strong>{' '}
                         from entry
-                    </span>
-                )}
-                {selectedPair.barrierMode === 'directional' && (
-                    <span>
-                        Higher: <strong>{preparedPreview?.barrier || formatSignedOffset(pairSettings.barrierOffset, '+')}</strong>{' '}
-                        · Lower: <strong>{preparedPreview?.barrier2 || formatSignedOffset(pairSettings.barrierOffset, '-')}</strong>
                     </span>
                 )}
                 {selectedPair.barrierMode === 'range' && (
