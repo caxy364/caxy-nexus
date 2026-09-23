@@ -22,11 +22,13 @@ const SYMBOLS = [
     'R_100',
 ];
 const LEG_KEYS = ['A', 'B'];
+const DURATION_UNIT_LABELS = { t: 'Ticks', m: 'Minutes' };
 const PAIR_CONFIGS = {
     HIGH_LOW_TICK: {
         label: 'High Tick / Low Tick',
-        description: 'A fixed five-tick pair using the highest tick and lowest tick contracts.',
+        description: 'A fixed five-tick pair. The selected tick is judged as the highest or lowest of the next five ticks.',
         fixedDuration: 5,
+        durationUnits: ['t'],
         fields: [
             { key: 'selectedTick', label: 'Selected tick (1-5)', type: 'number', min: 1, max: 5, step: 1 },
         ],
@@ -38,7 +40,8 @@ const PAIR_CONFIGS = {
     },
     TOUCH_NO_TOUCH: {
         label: 'Touch / No Touch',
-        description: 'One leg wins if the signed barrier is touched; the other wins if it is not touched.',
+        description: 'Both legs use the same barrier offset from entry: one wins on touch and the other wins when it is not touched.',
+        durationUnits: ['t', 'm'],
         fields: [
             { key: 'duration', label: 'Duration (ticks)', type: 'number', min: 2, step: 1 },
             { key: 'barrier', label: 'Barrier offset', type: 'number', step: 'any' },
@@ -52,7 +55,8 @@ const PAIR_CONFIGS = {
     },
     ENDS_BETWEEN_OUTSIDE: {
         label: 'Ends Between / Ends Outside',
-        description: 'The exit spot finishes between both barriers or outside either barrier.',
+        description: 'Both legs use the same low/high offsets: one wins inside the range and the other wins outside it.',
+        durationUnits: ['t', 'm'],
         fields: [
             { key: 'duration', label: 'Duration (ticks)', type: 'number', min: 2, step: 1 },
             { key: 'lowBarrier', label: 'Low barrier offset', type: 'number', step: 'any' },
@@ -67,7 +71,8 @@ const PAIR_CONFIGS = {
     },
     STAYS_BETWEEN_GOES_OUTSIDE: {
         label: 'Stays Between / Goes Outside',
-        description: 'The market stays between both barriers or touches either barrier during the contract.',
+        description: 'Both legs use the same low/high offsets: one wins while price stays inside and the other when either barrier is touched.',
+        durationUnits: ['t', 'm'],
         fields: [
             { key: 'duration', label: 'Duration (ticks)', type: 'number', min: 2, step: 1 },
             { key: 'lowBarrier', label: 'Low barrier offset', type: 'number', step: 'any' },
@@ -82,7 +87,8 @@ const PAIR_CONFIGS = {
     },
     HIGHER_LOWER: {
         label: 'Higher / Lower',
-        description: 'The exit spot finishes above or below the signed barrier offset.',
+        description: 'The two legs use symmetrical offsets: Higher uses +offset and Lower uses -offset from entry.',
+        durationUnits: ['t', 'm'],
         fields: [
             { key: 'duration', label: 'Duration (ticks)', type: 'number', min: 2, step: 1 },
             { key: 'barrierOffset', label: 'Barrier offset', type: 'number', step: 'any' },
@@ -109,6 +115,11 @@ const signedOffset = value => {
     const text = String(value ?? '').trim();
     return /^[+-]/.test(text) ? text : `+${text}`;
 };
+const formatSignedOffset = (value, forcedSign) => {
+    const parsed = numberOrNull(value);
+    if (parsed === null) return '--';
+    return forcedSign ? forcedSign + Math.abs(parsed) : signedOffset(parsed);
+};
 const createIdlePair = pairKey => {
     const config = PAIR_CONFIGS[pairKey];
     return {
@@ -129,6 +140,7 @@ const PairedBot = () => {
     const { transactions, journal, summary_card, run_panel, client } = store || {};
     const [pairKey, setPairKey] = useState('HIGH_LOW_TICK');
     const [pairSettings, setPairSettings] = useState(PAIR_CONFIGS.HIGH_LOW_TICK.defaults);
+    const [durationUnit, setDurationUnit] = useState('t');
     const [selectedSymbol, setSelectedSymbol] = useState('R_50');
     const [stake, setStake] = useState('1');
     const [targetProfit, setTargetProfit] = useState('100');
@@ -141,6 +153,7 @@ const PairedBot = () => {
     const [totalProfit, setTotalProfit] = useState(0);
     const pairKeyRef = useRef(pairKey);
     const pairSettingsRef = useRef(pairSettings);
+    const durationUnitRef = useRef('t');
     const selectedSymbolRef = useRef(selectedSymbol);
     const stakeRef = useRef(stake);
     const targetProfitRef = useRef(targetProfit);
@@ -176,6 +189,9 @@ const PairedBot = () => {
     useEffect(() => {
         selectedSymbolRef.current = selectedSymbol;
     }, [selectedSymbol]);
+    useEffect(() => {
+        durationUnitRef.current = durationUnit;
+    }, [durationUnit]);
     useEffect(() => {
         stakeRef.current = stake;
     }, [stake]);
@@ -370,7 +386,7 @@ const PairedBot = () => {
                 currency: client?.currency || 'USD',
                 underlying_symbol: symbol,
                 duration: config.fixedDuration || numberOrNull(settings.duration),
-                duration_unit: 't',
+                duration_unit: config.fixedDuration ? 't' : durationUnitRef.current,
                 contract_type: leg.contractType,
                 passthrough: {
                     group_id: groupId,
@@ -756,6 +772,18 @@ const PairedBot = () => {
                 setProposalError('Stake must be greater than zero.');
                 return false;
             }
+            if (!config.fixedDuration) {
+                const duration = numberOrNull(pairSettingsRef.current.duration);
+                const allowedUnits = config.durationUnits || ['t'];
+                if (!Number.isInteger(duration) || duration < 2) {
+                    setProposalError('Duration must be a whole number of at least 2.');
+                    return false;
+                }
+                if (!allowedUnits.includes(durationUnitRef.current)) {
+                    setProposalError('Select a valid duration unit for this contract pair.');
+                    return false;
+                }
+            }
             if (pairKeyRef.current === 'HIGH_LOW_TICK') {
                 const selectedTick = numberOrNull(pairSettingsRef.current.selectedTick);
                 if (!Number.isInteger(selectedTick) || selectedTick < 1 || selectedTick > 5) {
@@ -918,8 +946,10 @@ const PairedBot = () => {
     }, [startBot, stopBot]);
     const changePair = event => {
         const nextKey = event.target.value;
+        const nextConfig = PAIR_CONFIGS[nextKey];
         setPairKey(nextKey);
-        setPairSettings(PAIR_CONFIGS[nextKey].defaults);
+        setPairSettings(nextConfig.defaults);
+        setDurationUnit(nextConfig.durationUnits?.[0] || 't');
         setPairStatus(createIdlePair(nextKey));
         setProposalError('');
     };
@@ -963,7 +993,7 @@ const PairedBot = () => {
                     </select>
                 </label>
                 <label className="pb-field">
-                    <span>Market</span>
+                    <span>Volatility / market</span>
                     <select value={selectedSymbol} onChange={event => setSelectedSymbol(event.target.value)} disabled={isRunning}>
                         {SYMBOLS.map(symbol => <option value={symbol} key={symbol}>{formatSymbol(symbol)}</option>)}
                     </select>
@@ -1001,6 +1031,34 @@ const PairedBot = () => {
                         />
                     </label>
                 ))}
+                {selectedPair.fixedDuration ? (
+                    <div className="pb-field pb-field--readonly">
+                        <span>Duration</span>
+                        <strong>5 Ticks (fixed)</strong>
+                    </div>
+                ) : (
+                    <label className="pb-field">
+                        <span>Duration unit</span>
+                        <select value={durationUnit} onChange={event => setDurationUnit(event.target.value)} disabled={isRunning}>
+                            {(selectedPair.durationUnits || ['t']).map(unit => (
+                                <option value={unit} key={unit}>{DURATION_UNIT_LABELS[unit] || unit}</option>
+                            ))}
+                        </select>
+                    </label>
+                )}
+            </div>
+            <div className="pb-barrier-summary">
+                <span className="pb-kicker">SmartTrader barrier offsets</span>
+                {selectedPair.barrierMode === 'single' && (
+                    <span>Both legs: <strong>{formatSignedOffset(pairSettings.barrier)}</strong> from entry</span>
+                )}
+                {selectedPair.barrierMode === 'directional' && (
+                    <span>Higher: <strong>{formatSignedOffset(pairSettings.barrierOffset, '+')}</strong> · Lower: <strong>{formatSignedOffset(pairSettings.barrierOffset, '-')}</strong></span>
+                )}
+                {selectedPair.barrierMode === 'range' && (
+                    <span>Low barrier: <strong>{formatSignedOffset(pairSettings.lowBarrier, '-')}</strong> · High barrier: <strong>{formatSignedOffset(pairSettings.highBarrier, '+')}</strong></span>
+                )}
+                {!selectedPair.barrierMode && <span>Fixed five-tick contract; no barrier offset.</span>}
             </div>
             <div className="pb-actions">
                 <button type="button" className={`pb-run-button ${isRunning ? 'is-stop' : ''}`} onClick={toggleBot}>
