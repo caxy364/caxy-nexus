@@ -171,6 +171,31 @@
 .pb-leg-state { margin-top: 24px; color: #aebbd0; font-size: 0.8rem; font-weight: 800; letter-spacing: 0.08em; }
 .pb-leg-profit { margin-top: 8px; color: #00ff83; font-size: 0.86rem; }
 .pb-leg-error { margin-top: 8px; color: #ff9ca4; font-size: 0.78rem; }
+
+.pb-field--readonly strong {
+    min-height: 18px;
+    padding: 10px 11px;
+    border: 1px solid rgba(0, 255, 131, 0.25);
+    border-radius: 8px;
+    color: #00ff83;
+    background: rgba(0, 255, 131, 0.06);
+}
+.pb-barrier-summary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 14px;
+    padding: 12px 14px;
+    border: 1px solid rgba(0, 255, 131, 0.18);
+    border-radius: 9px;
+    color: #aebbd0;
+    background: rgba(0, 255, 131, 0.035);
+    font-size: 0.82rem;
+}
+.pb-barrier-summary .pb-kicker { margin-right: 6px; }
+.pb-barrier-summary strong { color: #00ff83; }
+
 @media (max-width: 700px) {
     .pb-tool { padding: 18px; }
     .pb-header,
