@@ -22,14 +22,27 @@ const SYMBOLS = [
     'R_100',
 ];
 const LEG_KEYS = ['A', 'B'];
-const DURATION_UNIT_LABELS = { t: 'Ticks', m: 'Minutes' };
+const OFFICIAL_DURATION_UNITS = ['t', 's', 'm', 'h', 'd'];
+const OFFICIAL_CONTRACT_TYPES = new Set([
+    'HIGHER',
+    'LOWER',
+    'ONETOUCH',
+    'NOTOUCH',
+    'EXPIRYRANGE',
+    'EXPIRYMISS',
+    'RANGE',
+    'UPORDOWN',
+    'TICKHIGH',
+    'TICKLOW',
+]);
+const TERMINAL_CONTRACT_STATUSES = new Set(['won', 'lost', 'sold', 'cancelled', 'expired']);
+const DURATION_UNIT_LABELS = { t: 'Ticks', s: 'Seconds', m: 'Minutes', h: 'Hours', d: 'Days' };
 const PROPOSAL_PAIR_MAX_SKEW_MS = 1500;
 const PAIR_CONFIGS = {
     HIGH_LOW_TICK: {
         label: 'High Tick / Low Tick',
         description: 'A fixed five-tick pair. The selected tick is judged as the highest or lowest of the next five ticks.',
         fixedDuration: 5,
-        durationUnits: ['t'],
         fields: [
             { key: 'selectedTick', label: 'Selected tick (1-5)', type: 'number', min: 1, max: 5, step: 1 },
         ],
@@ -42,12 +55,11 @@ const PAIR_CONFIGS = {
     TOUCH_NO_TOUCH: {
         label: 'Touch / No Touch',
         description: 'Both legs use the same barrier offset from entry: one wins on touch and the other wins when it is not touched.',
-        durationUnits: ['t', 'm'],
         fields: [
             { key: 'duration', label: 'Duration', type: 'number', min: 2, step: 1 },
-            { key: 'barrier', label: 'Barrier offset', type: 'number', step: 'any' },
+            { key: 'barrier', label: 'Barrier offset', type: 'text', step: 'any' },
         ],
-        defaults: { duration: '5', barrier: '0.1' },
+        defaults: { duration: '5', barrier: '' },
         barrierMode: 'single',
         legs: {
             A: { label: 'Touch', contractType: 'ONETOUCH' },
@@ -57,13 +69,12 @@ const PAIR_CONFIGS = {
     ENDS_BETWEEN_OUTSIDE: {
         label: 'Ends Between / Ends Outside',
         description: 'Both legs use the same low/high offsets: one wins inside the range and the other wins outside it.',
-        durationUnits: ['t', 'm'],
         fields: [
             { key: 'duration', label: 'Duration', type: 'number', min: 2, step: 1 },
-            { key: 'lowBarrier', label: 'Low barrier offset', type: 'number', step: 'any' },
-            { key: 'highBarrier', label: 'High barrier offset', type: 'number', step: 'any' },
+            { key: 'lowBarrier', label: 'Low barrier offset', type: 'text', step: 'any' },
+            { key: 'highBarrier', label: 'High barrier offset', type: 'text', step: 'any' },
         ],
-        defaults: { duration: '5', lowBarrier: '0.1', highBarrier: '0.2' },
+        defaults: { duration: '5', lowBarrier: '', highBarrier: '' },
         barrierMode: 'range',
         legs: {
             A: { label: 'Ends Between', contractType: 'EXPIRYRANGE' },
@@ -73,13 +84,12 @@ const PAIR_CONFIGS = {
     STAYS_BETWEEN_GOES_OUTSIDE: {
         label: 'Stays Between / Goes Outside',
         description: 'Both legs use the same low/high offsets: one wins while price stays inside and the other when either barrier is touched.',
-        durationUnits: ['t', 'm'],
         fields: [
             { key: 'duration', label: 'Duration', type: 'number', min: 2, step: 1 },
-            { key: 'lowBarrier', label: 'Low barrier offset', type: 'number', step: 'any' },
-            { key: 'highBarrier', label: 'High barrier offset', type: 'number', step: 'any' },
+            { key: 'lowBarrier', label: 'Low barrier offset', type: 'text', step: 'any' },
+            { key: 'highBarrier', label: 'High barrier offset', type: 'text', step: 'any' },
         ],
-        defaults: { duration: '5', lowBarrier: '0.1', highBarrier: '0.2' },
+        defaults: { duration: '5', lowBarrier: '', highBarrier: '' },
         barrierMode: 'range',
         legs: {
             A: { label: 'Stays Between', contractType: 'RANGE' },
@@ -89,12 +99,11 @@ const PAIR_CONFIGS = {
     HIGHER_LOWER: {
         label: 'Higher / Lower',
         description: 'Both legs use one shared barrier from entry (enter a negative value for a barrier below entry): Higher wins above it, Lower wins below it.',
-        durationUnits: ['t', 'm'],
         fields: [
             { key: 'duration', label: 'Duration', type: 'number', min: 2, step: 1 },
-            { key: 'barrier', label: 'Barrier offset', type: 'number', step: 'any' },
+            { key: 'barrier', label: 'Barrier offset', type: 'text', step: 'any' },
         ],
-        defaults: { duration: '5', barrier: '0.1' },
+        defaults: { duration: '5', barrier: '' },
         barrierMode: 'single',
         legs: {
             A: { label: 'Higher', contractType: 'HIGHER' },
@@ -112,106 +121,111 @@ const numberOrNull = value => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
 };
-const decimalPlaces = value => {
-    const text = String(value);
-    if (text.includes('e-')) return Number(text.split('e-')[1]);
-    return text.includes('.') ? text.split('.')[1].length : 0;
-};
-const getSynchronizedOffset = (inputOffset, pipSize, forcedSign) => {
-    const offset = numberOrNull(inputOffset);
-    const step = numberOrNull(pipSize);
-    if (offset === null || step === null || step <= 0) return null;
-    const roundedOffset = Math.round(Math.abs(offset) / step) * step;
-    if (!Number.isFinite(roundedOffset) || roundedOffset <= 0) return null;
-    const precision = Math.max(4, decimalPlaces(step));
-    const sign = forcedSign || (String(inputOffset).trim().startsWith('-') ? '-' : '+');
-    return `${sign}${roundedOffset.toFixed(precision)}`;
-};
-const signedOffset = value => {
-    const text = String(value ?? '').trim();
-    return /^[+-]/.test(text) ? text : `+${text}`;
-};
-const formatSignedOffset = (value, forcedSign) => {
-    const parsed = numberOrNull(value);
-    if (parsed === null) return '--';
-    return forcedSign ? forcedSign + Math.abs(parsed) : signedOffset(parsed);
-};
 const getBarrierCount = config => {
     if (config.barrierMode === 'range') return 2;
     if (config.barrierMode === 'single') return 1;
     return 0;
 };
-const getContractAvailability = (availableContracts, contractType, durationUnit, duration, requiredBarrierCount) => {
-    const contracts = (availableContracts || []).filter(item => item.contract_type === contractType);
-    const expiryType = durationUnit === 't' ? 'tick' : 'intraday';
-    const matchingExpiry = contracts.filter(item => item.expiry_type === expiryType);
-    const supportsDuration = matchingExpiry.some(item => {
+const normalizeSmartTraderBarrier = value => {
+    const text = String(value ?? '').trim();
+    if (!text) return null;
+    if (text.length > 20 || !/^[+-][0-9]+\.?[0-9]*$/.test(text)) return null;
+    return text;
+};
+const getMetadataDurationUnits = contract => {
+    const explicitUnits = contract?.duration_units ?? contract?.duration_unit;
+    const values = Array.isArray(explicitUnits) ? explicitUnits : explicitUnits ? [explicitUnits] : [];
+    const normalizeUnit = value => {
+        const unit = String(value || '').toLowerCase();
+        return {
+            tick: 't', ticks: 't', second: 's', seconds: 's', minute: 'm', minutes: 'm',
+            hour: 'h', hours: 'h', day: 'd', days: 'd', t: 't', s: 's', m: 'm', h: 'h', d: 'd',
+        }[unit];
+    };
+    const explicit = values.map(normalizeUnit).filter(Boolean);
+    if (explicit.length) return [...new Set(explicit)];
+    const expiryType = String(contract?.expiry_type || '').toLowerCase();
+    if (expiryType === 'tick') return ['t'];
+    if (expiryType === 'intraday') return ['s', 'm', 'h'];
+    if (expiryType === 'daily') return ['d'];
+    return [];
+};
+const getPairDurationUnits = (availableContracts, config) => {
+    const requiredBarrierCount = getBarrierCount(config);
+    return OFFICIAL_DURATION_UNITS.filter(unit =>
+        LEG_KEYS.every(key =>
+            (availableContracts || []).some(
+                contract =>
+                    contract.contract_type === config.legs[key].contractType &&
+                    getMetadataDurationUnits(contract).includes(unit) &&
+                    Number(contract.barriers) === requiredBarrierCount
+            )
+        )
+    );
+};
+const validateDuration = ({ duration, durationUnit, availability }) => {
+    if (!Number.isInteger(duration) || duration < 1) {
+        return { valid: false, error: 'Duration must be a whole number of at least 1.' };
+    }
+    if (!OFFICIAL_DURATION_UNITS.includes(durationUnit)) {
+        return { valid: false, error: 'Duration unit must be one of ticks, seconds, minutes, hours, or days.' };
+    }
+    if (!availability?.matchingExpiry?.length) {
+        return { valid: false, error: 'The selected contract does not support ' + DURATION_UNIT_LABELS[durationUnit].toLowerCase() + '.' };
+    }
+    const supportsDuration = availability.matchingBarrierCount.some(item => {
         const min = numberOrNull(item.min_contract_duration);
         const max = numberOrNull(item.max_contract_duration);
         return min !== null && max !== null && duration >= min && duration <= max;
     });
-    return {
-        contracts,
-        matchingExpiry,
-        supportsDuration,
-        supportsBarrierCount: contracts.some(item => Number(item.barriers) >= requiredBarrierCount),
-    };
+    return supportsDuration
+        ? { valid: true }
+        : { valid: false, error: availability.contractType + ' does not support ' + duration + ' ' + DURATION_UNIT_LABELS[durationUnit].toLowerCase() + '.' };
 };
-const preparePairParameters = ({ config, settings, durationUnit, pipSize }) => {
+const getContractAvailability = (availableContracts, contractType, durationUnit, requiredBarrierCount) => {
+    const contracts = (availableContracts || []).filter(item => item.contract_type === contractType);
+    const matchingExpiry = contracts.filter(item => getMetadataDurationUnits(item).includes(durationUnit));
+    const matchingBarrierCount = matchingExpiry.filter(item => Number(item.barriers) === requiredBarrierCount);
+    return { contractType, contracts, matchingExpiry, matchingBarrierCount, supportsBarrierCount: matchingBarrierCount.length > 0 };
+};
+const validateBarrierConfiguration = ({ config, barrier, barrier2 }) => {
+    const requiredBarrierCount = getBarrierCount(config);
+    if (requiredBarrierCount === 0) {
+        return barrier === null && barrier2 === null ? { valid: true } : { valid: false, error: 'This contract pair does not accept barriers.' };
+    }
+    if (requiredBarrierCount === 1) {
+        return barrier && barrier2 === null ? { valid: true } : { valid: false, error: 'Enter one signed barrier offset.' };
+    }
+    if (!barrier || !barrier2) return { valid: false, error: 'Enter both signed barrier offsets.' };
+    if (!barrier.startsWith('+') || Number(barrier) <= 0) return { valid: false, error: 'The high barrier must be a positive signed offset such as +6.97.' };
+    if (!barrier2.startsWith('-') || Number(barrier2) >= 0) return { valid: false, error: 'The low barrier must be a negative signed offset such as -6.94.' };
+    return { valid: true };
+};
+const preparePairParameters = ({ config, settings, durationUnit }) => {
     const rawDuration = config.fixedDuration ?? numberOrNull(settings.duration);
     if (rawDuration === null) return { error: 'Duration is required.' };
-    const duration = config.fixedDuration
-        ? config.fixedDuration
-        : durationUnit === 't'
-          ? Math.floor(rawDuration)
-          : rawDuration;
-    if (!Number.isInteger(duration) || duration < 1) {
-        return { error: 'Duration must be a whole number of at least 1.' };
-    }
-    if (!['t', 'm'].includes(durationUnit)) {
-        return { error: 'Duration unit must be ticks or minutes.' };
-    }
-    if (config.fixedDuration && durationUnit !== 't') {
-        return { error: 'This contract pair only supports tick duration.' };
-    }
-    if (!numberOrNull(pipSize) || numberOrNull(pipSize) <= 0) {
-        return { error: 'The official market precision is not available yet.' };
-    }
+    const duration = config.fixedDuration ?? rawDuration;
+    if (!Number.isInteger(duration) || duration < 1) return { error: 'Duration must be a whole number of at least 1.' };
+    if (!OFFICIAL_DURATION_UNITS.includes(durationUnit)) return { error: 'Duration unit must be one of ticks, seconds, minutes, hours, or days.' };
+    if (config.fixedDuration && durationUnit !== 't') return { error: 'This contract pair only supports tick duration.' };
     const result = { duration, durationUnit, selectedTick: null, barrier: null, barrier2: null };
     if (config === PAIR_CONFIGS.HIGH_LOW_TICK) {
         const selectedTick = numberOrNull(settings.selectedTick);
-        if (!Number.isInteger(selectedTick) || selectedTick < 1 || selectedTick > 5) {
-            return { error: 'Selected tick must be an integer from 1 to 5.' };
-        }
+        if (!Number.isInteger(selectedTick) || selectedTick < 1 || selectedTick > 5) return { error: 'Selected tick must be an integer from 1 to 5.' };
         result.selectedTick = selectedTick;
     }
     if (config.barrierMode === 'single') {
-        // Higher/Lower and Touch/No Touch share ONE barrier between both legs, with
-        // its sign taken exactly as the trader entered it (matches SmartTrader: a
-        // single barrier value, positive or negative, applied to both contracts).
-        result.barrier = getSynchronizedOffset(settings.barrier, pipSize);
+        result.barrier = normalizeSmartTraderBarrier(settings.barrier);
+        if (String(settings.barrier ?? '').trim() && !result.barrier) return { error: 'Barrier must be a signed numeric string such as +2.46 or -6.94.' };
     }
     if (config.barrierMode === 'range') {
-        const low = numberOrNull(settings.lowBarrier);
-        const high = numberOrNull(settings.highBarrier);
-        if (low === null || high === null || low <= 0 || high <= low) {
-            return { error: 'High barrier must be greater than the positive low barrier.' };
-        }
-        result.barrier = getSynchronizedOffset(settings.highBarrier, pipSize, '+');
-        result.barrier2 = getSynchronizedOffset(settings.lowBarrier, pipSize, '-');
-        if (
-            result.barrier &&
-            result.barrier2 &&
-            Number(result.barrier.slice(1)) <= Number(result.barrier2.slice(1))
-        ) {
-            return { error: 'Aligned high barrier must remain greater than the aligned low barrier.' };
-        }
+        result.barrier = normalizeSmartTraderBarrier(settings.highBarrier);
+        result.barrier2 = normalizeSmartTraderBarrier(settings.lowBarrier);
+        if (String(settings.highBarrier ?? '').trim() && !result.barrier) return { error: 'The high barrier must be a signed numeric string such as +6.97.' };
+        if (String(settings.lowBarrier ?? '').trim() && !result.barrier2) return { error: 'The low barrier must be a signed numeric string such as -6.94.' };
     }
-    if (config.barrierMode && (!result.barrier || (config.barrierMode === 'range' && !result.barrier2))) {
-        return {
-            error: 'Barrier must be greater than zero and align with the market pip size.',
-        };
-    }
+    const barrierValidation = validateBarrierConfiguration({ config, barrier: result.barrier, barrier2: result.barrier2 });
+    if (!barrierValidation.valid) return { error: barrierValidation.error };
     return result;
 };
 const buildProposalRequest = ({
@@ -229,6 +243,21 @@ const buildProposalRequest = ({
     barrier2,
 }) => {
     const leg = config.legs[key];
+    if (!OFFICIAL_CONTRACT_TYPES.has(leg.contractType)) throw new Error('Unsupported Deriv contract type: ' + leg.contractType);
+    const requiredBarrierCount = getBarrierCount(config);
+    const passthrough = {
+        group_id: groupId,
+        pair_key: pairKey,
+        leg_key: key,
+        custom_type: leg.label,
+        deriv_contract_type: leg.contractType,
+        symbol,
+        amount,
+        currency,
+        duration,
+        duration_unit: durationUnit,
+        sent_stake: amount,
+    };
     const request = {
         proposal: 1,
         basis: 'stake',
@@ -238,20 +267,35 @@ const buildProposalRequest = ({
         duration,
         duration_unit: durationUnit,
         contract_type: leg.contractType,
-        passthrough: {
-            group_id: groupId,
-            pair_key: pairKey,
-            leg_key: key,
-            custom_type: leg.label,
-            deriv_contract_type: leg.contractType,
-            symbol,
-            sent_stake: amount,
-        },
+        passthrough,
     };
-    if (selectedTick !== null) request.selected_tick = selectedTick;
-    if (barrier) request.barrier = barrier;
-    if (barrier2) request.barrier2 = barrier2;
+    if (leg.contractType === 'TICKHIGH' || leg.contractType === 'TICKLOW') {
+        request.selected_tick = selectedTick;
+        passthrough.selected_tick = selectedTick;
+    }
+    if (requiredBarrierCount === 1) {
+        request.barrier = barrier;
+        passthrough.barrier = barrier;
+    }
+    if (requiredBarrierCount === 2) {
+        request.barrier = barrier;
+        request.barrier2 = barrier2;
+        passthrough.barrier = barrier;
+        passthrough.barrier2 = barrier2;
+    }
     return request;
+};
+const getProposalConfigurationMismatch = (proposalA, proposalB) => {
+    const comparableFields = ['symbol', 'amount', 'currency', 'duration', 'durationUnit', 'barrier', 'barrier2', 'selectedTick'];
+    const mismatch = comparableFields.find(field => proposalA[field] !== proposalB[field]);
+    if (mismatch) return mismatch + ' differs between the pair legs.';
+    if (proposalA.pairKey !== proposalB.pairKey) return 'pair type differs between the pair legs.';
+    const config = PAIR_CONFIGS[proposalA.pairKey];
+    if (!config) return 'pair type is not recognized.';
+    if (proposalA.deriv_contract_type !== config.legs.A.contractType) return 'Leg A contract type does not match the selected pair.';
+    if (proposalB.deriv_contract_type !== config.legs.B.contractType) return 'Leg B contract type does not match the selected pair.';
+    if (!OFFICIAL_CONTRACT_TYPES.has(proposalA.deriv_contract_type) || !OFFICIAL_CONTRACT_TYPES.has(proposalB.deriv_contract_type)) return 'A leg uses an unsupported Deriv contract type.';
+    return null;
 };
 const createIdlePair = pairKey => {
     const config = PAIR_CONFIGS[pairKey];
@@ -324,15 +368,25 @@ const PairedBot = () => {
     const processingRef = useRef(false);
     const totalProfitRef = useRef(0);
     const selectedPair = PAIR_CONFIGS[pairKey];
-    const selectedMarketSpec = marketSpecs[selectedSymbol];
-    const preparedPreview = selectedMarketSpec
-        ? preparePairParameters({
-              config: selectedPair,
-              settings: pairSettings,
-              durationUnit: selectedPair.fixedDuration ? 't' : durationUnit,
-              pipSize: selectedMarketSpec.pip_size,
-          })
-        : null;
+        const availableDurationUnits = getPairDurationUnits(contractSpecs[selectedSymbol], selectedPair);
+    useEffect(() => {
+        if (selectedPair.fixedDuration) {
+            if (durationUnit !== 't') {
+                durationUnitRef.current = 't';
+                setDurationUnit('t');
+            }
+            return;
+        }
+        if (availableDurationUnits.length && !availableDurationUnits.includes(durationUnit)) {
+            durationUnitRef.current = availableDurationUnits[0];
+            setDurationUnit(availableDurationUnits[0]);
+        }
+    }, [availableDurationUnits.join(','), durationUnit, selectedPair.fixedDuration]);
+    const preparedPreview = preparePairParameters({
+        config: selectedPair,
+        settings: pairSettings,
+        durationUnit: selectedPair.fixedDuration ? 't' : durationUnit,
+    });
     const marketSymbols = Object.values(marketSpecs)
         .filter(
             item =>
@@ -461,10 +515,19 @@ const PairedBot = () => {
             !startPendingRef.current ||
             !runningRef.current ||
             !authorizedRef.current ||
-            !marketSpecsRef.current[symbol]?.pip_size ||
+            !marketSpecsRef.current[symbol] ||
             !Array.isArray(contractSpecsRef.current[symbol])
         ) {
             return;
+        }
+        const config = PAIR_CONFIGS[pairKeyRef.current];
+        if (!config.fixedDuration) {
+            const supportedUnits = getPairDurationUnits(contractSpecsRef.current[symbol], config);
+            if (!supportedUnits.length) return;
+            if (!supportedUnits.includes(durationUnitRef.current)) {
+                durationUnitRef.current = supportedUnits[0];
+                setDurationUnit(supportedUnits[0]);
+            }
         }
         startPendingRef.current = false;
         executePairRef.current?.(symbol);
@@ -785,6 +848,32 @@ const PairedBot = () => {
                 rejectPendingPair(context.group_id, 'Paired proposal quotes were not received close enough together. No leg was bought.');
                 return;
             }
+            const configurationMismatch = getProposalConfigurationMismatch(proposalA, proposalB);
+            if (configurationMismatch) {
+                rejectPendingPair(context.group_id, 'Paired proposal configuration mismatch: ' + configurationMismatch + ' No leg was bought.');
+                return;
+            }
+            console.log(
+                '[PairedBot] Final proposal debug summary before buying:',
+                JSON.stringify({
+                    pairType: proposalA.pairKey,
+                    symbol: proposalA.symbol,
+                    duration: proposalA.duration,
+                    duration_unit: proposalA.durationUnit,
+                    legAContractType: proposalA.deriv_contract_type,
+                    legABarrier: proposalA.barrier,
+                    legABarrier2: proposalA.barrier2,
+                    legBContractType: proposalB.deriv_contract_type,
+                    legBBarrier: proposalB.barrier,
+                    legBBarrier2: proposalB.barrier2,
+                    selected_tick: proposalA.selectedTick,
+                    proposalAId: proposalA.proposalId,
+                    proposalBId: proposalB.proposalId,
+                    proposalAAskPrice: proposalA.askPrice,
+                    proposalBAskPrice: proposalB.askPrice,
+                    anyDerivError: null,
+                })
+            );
             const timeoutId = proposalGuardTimeoutsRef.current.get(context.group_id);
             if (timeoutId) window.clearTimeout(timeoutId);
             proposalGuardTimeoutsRef.current.delete(context.group_id);
@@ -879,6 +968,12 @@ const PairedBot = () => {
             } catch {
                 return;
             }
+            if (data.msg_type === 'proposal' || data.echo_req?.proposal === 1 || data.error?.echo_req?.proposal === 1) {
+                console.log('[PairedBot] Complete proposal response:', JSON.stringify(data));
+                if (data.error) {
+                    console.error('[PairedBot] Deriv proposal error:', JSON.stringify({ error: data.error, echo_req: data.echo_req, contract_type: data.echo_req?.contract_type }));
+                }
+            }
             if (data.error && (data.echo_req?.active_symbols || data.echo_req?.contracts_for)) {
                 setProposalError(data.error.message || 'Deriv market metadata request failed.');
                 if (startPendingRef.current) {
@@ -913,7 +1008,11 @@ const PairedBot = () => {
                 const context =
                     data.echo_req?.passthrough ||
                     pendingProposalsRef.current.get(String(data.echo_req?.buy || ''));
-                markError(context, data.error.message || 'Deriv request failed.');
+                const isProposalError = data.echo_req?.proposal === 1 || data.error?.echo_req?.proposal === 1;
+                const errorMessage = isProposalError
+                    ? 'Deriv proposal response: ' + JSON.stringify(data)
+                    : data.error.message || 'Deriv request failed.';
+                markError(context, errorMessage);
                 return;
             }
             if (data.msg_type === 'authorize') {
@@ -979,11 +1078,7 @@ const PairedBot = () => {
                     contract.is_sold === 1 ||
                     contract.is_sold === true ||
                     contract.is_sold === '1' ||
-                    contract.is_expired === 1 ||
-                    contract.is_expired === true ||
-                    contract.is_settleable === 1 ||
-                    contract.is_settleable === true ||
-                    (status && status !== 'open');
+                    TERMINAL_CONTRACT_STATUSES.has(status);
                 publishContract({
                     ...meta,
                     ...contract,
@@ -1080,8 +1175,8 @@ const PairedBot = () => {
             }
             const symbolInfo = marketSpecsRef.current[symbol];
             const availableContracts = contractSpecsRef.current[symbol];
-            if (!symbolInfo?.pip_size) {
-                setProposalError('Official market precision is not loaded for this symbol.');
+            if (!symbolInfo) {
+                setProposalError('Market metadata is not loaded for this symbol.');
                 requestMarketMetadata(symbol);
                 return false;
             }
@@ -1095,7 +1190,6 @@ const PairedBot = () => {
                 config,
                 settings: pairSettingsRef.current,
                 durationUnit,
-                pipSize: symbolInfo.pip_size,
             });
             if (prepared.error) {
                 setProposalError(prepared.error);
@@ -1108,21 +1202,23 @@ const PairedBot = () => {
                     availableContracts,
                     contractType,
                     prepared.durationUnit,
-                    prepared.duration,
                     requiredBarrierCount
                 );
                 if (!availability.contracts.length) {
                     setProposalError(`${contractType} is not available for ${formatSymbol(symbol)}.`);
                     return false;
                 }
-                if (!availability.matchingExpiry.length || !availability.supportsDuration) {
-                    setProposalError(
-                        `${contractType} does not support ${prepared.duration} ${DURATION_UNIT_LABELS[prepared.durationUnit].toLowerCase()} on ${formatSymbol(symbol)}.`
-                    );
+                if (!availability.supportsBarrierCount) {
+                    setProposalError(contractType + ' does not support exactly ' + requiredBarrierCount + ' barrier(s) for the selected duration unit.');
                     return false;
                 }
-                if (requiredBarrierCount > 0 && !availability.supportsBarrierCount) {
-                    setProposalError(`${contractType} does not support the required barrier count.`);
+                const durationValidation = validateDuration({
+                    duration: prepared.duration,
+                    durationUnit: prepared.durationUnit,
+                    availability,
+                });
+                if (!durationValidation.valid) {
+                    setProposalError(durationValidation.error + ' on ' + formatSymbol(symbol) + '.');
                     return false;
                 }
             }
@@ -1153,9 +1249,7 @@ const PairedBot = () => {
             setProposalError('');
             processingRef.current = true;
             LEG_KEYS.forEach(key => {
-                wsRef.current?.send(
-                    JSON.stringify(
-                        buildProposalRequest({
+                const proposalRequest = buildProposalRequest({
                             config,
                             key,
                             groupId,
@@ -1173,9 +1267,9 @@ const PairedBot = () => {
                             // the same high (+) / low (-) barrier pair for both legs.
                             barrier: prepared.barrier,
                             barrier2: config.barrierMode === 'range' ? prepared.barrier2 : null,
-                        })
-                    )
-                );
+                        });
+                console.log('[PairedBot] Outgoing proposal request:', JSON.stringify(proposalRequest));
+                wsRef.current?.send(JSON.stringify(proposalRequest));
             });
             reconcileGroup(groupId);
             run_panel?.setContractStage?.(contract_stages.PURCHASE_SENT);
@@ -1310,9 +1404,11 @@ const PairedBot = () => {
     const changePair = event => {
         const nextKey = event.target.value;
         const nextConfig = PAIR_CONFIGS[nextKey];
+        const nextDurationUnits = nextConfig.fixedDuration ? ['t'] : getPairDurationUnits(contractSpecsRef.current[selectedSymbolRef.current], nextConfig);
         setPairKey(nextKey);
         setPairSettings(nextConfig.defaults);
-        setDurationUnit(nextConfig.durationUnits?.[0] || 't');
+        durationUnitRef.current = nextDurationUnits[0] || '';
+        setDurationUnit(nextDurationUnits[0] || '');
         setPairStatus(createIdlePair(nextKey));
         setProposalError('');
     };
@@ -1396,9 +1492,10 @@ const PairedBot = () => {
                         <span>{field.label}</span>
                         <input
                             type={field.type}
-                            min={field.min}
-                            max={field.max}
-                            step={field.step}
+                            min={field.type === 'number' ? field.min : undefined}
+                            max={field.type === 'number' ? field.max : undefined}
+                            step={field.type === 'number' ? field.step : undefined}
+                            inputMode={field.type === 'text' ? 'decimal' : undefined}
                             value={pairSettings[field.key] ?? ''}
                             onChange={event => setPairSettings(current => ({ ...current, [field.key]: event.target.value }))}
                             disabled={isRunning}
@@ -1413,32 +1510,27 @@ const PairedBot = () => {
                 ) : (
                     <label className="pb-field">
                         <span>Duration unit</span>
-                        <select value={durationUnit} onChange={event => setDurationUnit(event.target.value)} disabled={isRunning}>
-                            {(selectedPair.durationUnits || ['t']).map(unit => (
-                                <option value={unit} key={unit}>{DURATION_UNIT_LABELS[unit] || unit}</option>
-                            ))}
+                        <select value={availableDurationUnits.includes(durationUnit) ? durationUnit : ''} onChange={event => setDurationUnit(event.target.value)} disabled={isRunning || !availableDurationUnits.length}>
+                            {availableDurationUnits.length ? (
+                                availableDurationUnits.map(unit => (
+                                    <option value={unit} key={unit}>{DURATION_UNIT_LABELS[unit] || unit}</option>
+                                ))
+                            ) : (
+                                <option value="">Loading supported units...</option>
+                            )}
                         </select>
                     </label>
                 )}
             </div>
             <div className="pb-barrier-summary">
                 <span className="pb-kicker">SmartTrader barrier offsets</span>
-                <span>
-                    Official pip size: <strong>{selectedMarketSpec?.pip_size ?? 'Loading...'}</strong>
-                </span>
                 {selectedPair.barrierMode === 'single' && (
-                    <span>
-                        Both legs:{' '}
-                        <strong>
-                            {preparedPreview?.barrier || formatSignedOffset(pairSettings.barrier)}
-                        </strong>{' '}
-                        from entry
-                    </span>
+                    <span>Both legs: <strong>{preparedPreview?.barrier || String(pairSettings.barrier || '').trim() || '--'}</strong> from entry</span>
                 )}
                 {selectedPair.barrierMode === 'range' && (
                     <span>
-                        Low barrier: <strong>{preparedPreview?.barrier2 || formatSignedOffset(pairSettings.lowBarrier, '-')}</strong>{' '}
-                        · High barrier: <strong>{preparedPreview?.barrier || formatSignedOffset(pairSettings.highBarrier, '+')}</strong>
+                        Low barrier: <strong>{preparedPreview?.barrier2 || String(pairSettings.lowBarrier || '').trim() || '--'}</strong>{' '}
+                        · High barrier: <strong>{preparedPreview?.barrier || String(pairSettings.highBarrier || '').trim() || '--'}</strong>
                     </span>
                 )}
                 {!selectedPair.barrierMode && <span>Fixed five-tick contract; no barrier offset.</span>}
