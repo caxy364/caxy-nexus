@@ -9,20 +9,16 @@ import Higherlower from './Higherlower';
 import PairedBot from './PairedBot/PairedBot';
 import SignalHub from './Oracle';
 
-// Dummy Components for now
-
-
 const CustomDash = () => {
     const { dashboard } = useStore();
     const [activeTab, setActiveTab] = useState(dashboard?.selected_signal_component || 'oracle');
 
     const tabs = [
         { id: 'oracle', label: 'The Oracle', component: <SignalHub /> },
-        { id: 'elite', label: 'Elite Flow', component: <EliteFlow/> },
-        { id: 'hedge', label: 'Over5/Under4', component: <Dualbot/> },
-        { id: 'updown', label: 'Up/Down', component: <Higherlower /> },
+        { id: 'elite', label: 'Elite Flow', component: <EliteFlow /> },
+        { id: 'hedge', label: 'Over5/Under4', component: <Dualbot /> },
+        { id: 'dual-higher-lower', label: 'Dual Higher/Lower', component: <Higherlower /> },
         { id: 'paired', label: 'In / Out', component: <PairedBot /> },
-       
     ];
 
     useEffect(() => {
@@ -38,7 +34,6 @@ const CustomDash = () => {
 
     return (
         <div className='dash-container'>
-            {/* Scrollable Tab Bar */}
             <div className='tab-wrapper'>
                 <div className='tab-scroll-container'>
                     {tabs.map(tab => (
@@ -53,7 +48,6 @@ const CustomDash = () => {
                 </div>
             </div>
 
-            {/* Dynamic Content Area */}
             <div className='tab-view-area'>{tabs.find(t => t.id === activeTab)?.component}</div>
         </div>
     );
