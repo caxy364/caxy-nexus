@@ -6,6 +6,7 @@ import './Customdash.css';
 import Dualbot from './Dualbot';
 import EliteFlow from './EliteFlow';
 import Higherlower from './Higherlower';
+import PairedBot from './PairedBot/PairedBot';
 import SignalHub from './Oracle';
 
 // Dummy Components for now
@@ -20,6 +21,7 @@ const CustomDash = () => {
         { id: 'elite', label: 'Elite Flow', component: <EliteFlow/> },
         { id: 'hedge', label: 'Over5/Under4', component: <Dualbot/> },
         { id: 'updown', label: 'Up/Down', component: <Higherlower /> },
+        { id: 'paired', label: 'In / Out', component: <PairedBot /> },
        
     ];
 
