@@ -11,7 +11,7 @@ const AiBots = observer(() => {
     const { isDesktop, isTablet } = useDevice();
     const [loading, setLoading] = useState(false);
 
-    const loadXMLToBotBuilder = (xml_string: string): void => {
+    const loadXMLToBotBuilder = xml_string => {
         try {
             const strategy_id = window.Blockly.utils.idGenerator.genUid();
 
@@ -38,7 +38,7 @@ const AiBots = observer(() => {
         }
     };
 
-    const loadFreeBot = async (botFilename: string) => {
+    const loadFreeBot = async botFilename => {
         setLoading(true);
         try {
             const response = await axios.get(`/${botFilename}`, { responseType: 'text' });
