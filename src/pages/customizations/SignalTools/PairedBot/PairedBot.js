@@ -27,8 +27,10 @@ const PAIR_CONFIGS = {
         label: 'High Tick / Low Tick',
         description: 'A fixed five-tick pair using the highest tick and lowest tick contracts.',
         fixedDuration: 5,
-        fields: [],
-        defaults: {},
+        fields: [
+            { key: 'selectedTick', label: 'Selected tick (1-5)', type: 'number', min: 1, max: 5, step: 1 },
+        ],
+        defaults: { selectedTick: '3' },
         legs: {
             A: { label: 'High Tick', contractType: 'TICKHIGH' },
             B: { label: 'Low Tick', contractType: 'TICKLOW' },
@@ -380,6 +382,9 @@ const PairedBot = () => {
                     sent_stake: amount,
                 },
             };
+            if (pairKeyRef.current === 'HIGH_LOW_TICK') {
+                request.selected_tick = numberOrNull(settings.selectedTick);
+            }
             if (config.barrierMode === 'single') {
                 request.barrier = signedOffset(settings.barrier);
             }
@@ -751,6 +756,13 @@ const PairedBot = () => {
                 setProposalError('Stake must be greater than zero.');
                 return false;
             }
+            if (pairKeyRef.current === 'HIGH_LOW_TICK') {
+                const selectedTick = numberOrNull(pairSettingsRef.current.selectedTick);
+                if (!Number.isInteger(selectedTick) || selectedTick < 1 || selectedTick > 5) {
+                    setProposalError('Selected tick must be an integer from 1 to 5.');
+                    return false;
+                }
+            }
             if (config.barrierMode === 'range') {
                 const low = numberOrNull(pairSettingsRef.current.lowBarrier);
                 const high = numberOrNull(pairSettingsRef.current.highBarrier);
@@ -981,6 +993,7 @@ const PairedBot = () => {
                         <input
                             type={field.type}
                             min={field.min}
+                            max={field.max}
                             step={field.step}
                             value={pairSettings[field.key] ?? ''}
                             onChange={event => setPairSettings(current => ({ ...current, [field.key]: event.target.value }))}
