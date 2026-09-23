@@ -147,6 +147,8 @@ const PairedBot = () => {
     const [targetProfit, setTargetProfit] = useState('100');
     const [stopLoss, setStopLoss] = useState('100');
     const [executionMode, setExecutionMode] = useState('once');
+    const [maxRuns, setMaxRuns] = useState('10');
+    const [runsCompleted, setRunsCompleted] = useState(0);
     const [isRunning, setIsRunning] = useState(false);
     const [pairStatus, setPairStatus] = useState(createIdlePair('HIGH_LOW_TICK'));
     const [proposalError, setProposalError] = useState('');
@@ -160,6 +162,8 @@ const PairedBot = () => {
     const targetProfitRef = useRef(targetProfit);
     const stopLossRef = useRef(stopLoss);
     const executionModeRef = useRef(executionMode);
+    const maxRunsRef = useRef(maxRuns);
+    const runsCompletedRef = useRef(0);
     const runningRef = useRef(false);
     const wsRef = useRef(null);
     const authorizedRef = useRef(false);
@@ -207,6 +211,9 @@ const PairedBot = () => {
     useEffect(() => {
         executionModeRef.current = executionMode;
     }, [executionMode]);
+    useEffect(() => {
+        maxRunsRef.current = maxRuns;
+    }, [maxRuns]);
     useEffect(() => {
         runningRef.current = isRunning;
         run_panel?.setIsRunning?.(isRunning);
@@ -484,13 +491,15 @@ const PairedBot = () => {
                     const hitLimit =
                         totalProfitRef.current >= Number(targetProfitRef.current) ||
                         totalProfitRef.current <= -Number(stopLossRef.current);
-                    if (hitLimit) {
-                        stopBot('Session ended by target or stop loss.');
-                        Swal.fire(
-                            'Session Ended',
-                            `Final P/L: ${totalProfitRef.current.toFixed(2)} ${client?.currency || 'USD'}`,
-                            'info'
-                        );
+                    const hitRunLimit =
+                        executionModeRef.current === 'repeat' &&
+                        runsCompletedRef.current >= Number(maxRunsRef.current);
+                    if (hitLimit || hitRunLimit) {
+                        const runMessage = hitRunLimit
+                            ? `Completed ${runsCompletedRef.current} of ${maxRunsRef.current} requested runs.`
+                            : `Final P/L: ${totalProfitRef.current.toFixed(2)} ${client?.currency || 'USD'}`;
+                        stopBot(hitRunLimit ? 'Requested run count completed.' : 'Session ended by target or stop loss.');
+                        Swal.fire(hitRunLimit ? 'Run Count Completed' : 'Session Ended', runMessage, 'info');
                     } else {
                         run_panel?.setContractStage?.(contract_stages.CONTRACT_CLOSED);
                         scheduleNextPair();
@@ -900,6 +909,12 @@ const PairedBot = () => {
                     return false;
                 }
             }
+            const requestedRuns = numberOrNull(maxRunsRef.current);
+            if (executionModeRef.current === 'repeat' && runsCompletedRef.current >= requestedRuns) {
+                return false;
+            }
+            runsCompletedRef.current += 1;
+            setRunsCompleted(runsCompletedRef.current);
             const groupId = `paired-${pairKeyRef.current.toLowerCase()}-${symbol}-${Date.now()}`;
             const group = {
                 groupId,
@@ -934,12 +949,21 @@ const PairedBot = () => {
             Swal.fire('Error', 'Login Required', 'error');
             return;
         }
+        if (executionMode === 'repeat') {
+            const requestedRuns = numberOrNull(maxRuns);
+            if (!Number.isInteger(requestedRuns) || requestedRuns < 1) {
+                setProposalError('Number of runs must be a whole number of at least 1.');
+                return;
+            }
+        }
         if (runningRef.current) {
             stopBot();
             return;
         }
         totalProfitRef.current = 0;
         setTotalProfit(0);
+        runsCompletedRef.current = 0;
+        setRunsCompleted(0);
         setProposalError('');
         setLastQuote('--');
         setPairStatus(createIdlePair(pairKeyRef.current));
@@ -981,6 +1005,8 @@ const PairedBot = () => {
         stopBot,
         summary_card,
         transactions,
+        executionMode,
+        maxRuns,
     ]);
     const toggleBot = useCallback(() => {
         observer.emit(runningRef.current ? 'pairedbot.stop' : 'pairedbot.start');
@@ -1104,6 +1130,17 @@ const PairedBot = () => {
                     </select>
                 </label>
                 <label className="pb-field">
+                    <span>Number of runs</span>
+                    <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={maxRuns}
+                        onChange={event => setMaxRuns(event.target.value)}
+                        disabled={isRunning || executionMode === 'once'}
+                    />
+                </label>
+                <label className="pb-field">
                     <span>Target P/L</span>
                     <input type="number" step="0.01" value={targetProfit} onChange={event => setTargetProfit(event.target.value)} disabled={isRunning} />
                 </label>
@@ -1162,6 +1199,7 @@ const PairedBot = () => {
                 <div className="pb-live-metrics">
                     <span>Quote <strong>{lastQuote}</strong></span>
                     <span>Session P/L <strong className={totalProfit >= 0 ? 'is-positive' : 'is-negative'}>{totalProfit.toFixed(2)}</strong></span>
+                    <span>Runs <strong>{runsCompleted} / {executionMode === 'repeat' ? maxRuns || '--' : '1'}</strong></span>
                 </div>
             </div>
             {proposalError && <div className="pb-error" role="alert">{proposalError}</div>}
