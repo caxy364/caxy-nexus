@@ -4,6 +4,7 @@ import { useStore } from '@/hooks/useStore';
 
 import './Customdash.css';
 import Dualbot from './Dualbot';
+import DualHigherLower from './DualHigherLower';
 import EliteFlow from './EliteFlow';
 import Higherlower from './Higherlower';
 import PairedBot from './PairedBot/PairedBot';
@@ -15,9 +16,10 @@ const CustomDash = () => {
 
     const tabs = [
         { id: 'oracle', label: 'The Oracle', component: <SignalHub /> },
-        { id: 'elite', label: 'Elite Flow', component: <EliteFlow /> },
-        { id: 'hedge', label: 'Over5/Under4', component: <Dualbot /> },
-        { id: 'dual-higher-lower', label: 'Dual Higher/Lower', component: <Higherlower /> },
+        { id: 'elite', label: 'Elite Flow', component: <EliteFlow/> },
+        { id: 'hedge', label: 'Over5/Under4', component: <Dualbot/> },
+        { id: 'dual-higher-lower', label: 'Dual Higher/Lower', component: <DualHigherLower /> },
+        { id: 'updown', label: 'Up/Down', component: <Higherlower /> },
         { id: 'paired', label: 'In / Out', component: <PairedBot /> },
     ];
 
