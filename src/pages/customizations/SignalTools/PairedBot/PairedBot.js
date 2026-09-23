@@ -23,6 +23,7 @@ const SYMBOLS = [
 ];
 const LEG_KEYS = ['A', 'B'];
 const DURATION_UNIT_LABELS = { t: 'Ticks', m: 'Minutes' };
+const PROPOSAL_PAIR_MAX_SKEW_MS = 1500;
 const PAIR_CONFIGS = {
     HIGH_LOW_TICK: {
         label: 'High Tick / Low Tick',
@@ -176,6 +177,8 @@ const PairedBot = () => {
     const pairGroupsRef = useRef({});
     const currentGroupIdRef = useRef(null);
     const pendingProposalsRef = useRef(new Map());
+    const proposalGroupsRef = useRef(new Map());
+    const proposalGuardTimeoutsRef = useRef(new Map());
     const recoveryTimeoutsRef = useRef(new Map());
     const processingRef = useRef(false);
     const totalProfitRef = useRef(0);
@@ -328,6 +331,9 @@ const PairedBot = () => {
     );
     const clearState = useCallback((preserveOpenContracts = false) => {
         pendingProposalsRef.current.clear();
+        proposalGuardTimeoutsRef.current.forEach(timeoutId => window.clearTimeout(timeoutId));
+        proposalGuardTimeoutsRef.current.clear();
+        proposalGroupsRef.current.clear();
         recoveryTimeoutsRef.current.forEach(timeoutId => window.clearTimeout(timeoutId));
         recoveryTimeoutsRef.current.clear();
         if (!preserveOpenContracts) {
@@ -507,6 +513,48 @@ const PairedBot = () => {
             updateLeg,
         ]
     );
+    const unwindGroup = useCallback(
+        (groupId, reason) => {
+            const group = pairGroupsRef.current[groupId];
+            if (!group) return;
+            updateGroup(groupId, current => ({ ...current, status: 'UNWINDING', error: reason }));
+            LEG_KEYS.forEach(key => {
+                const contractId = group.legs[key]?.contractId;
+                if (contractId && activeContractsRef.current.has(String(contractId))) {
+                    wsRef.current?.send(JSON.stringify({ sell: contractId, price: 0 }));
+                    updateLeg(groupId, key, 'ACTIVE', { error: 'Pair protection is closing this leg.' });
+                }
+            });
+            publishError(reason);
+            run_panel?.setContractStage?.(contract_stages.IS_STOPPING);
+        },
+        [publishError, run_panel, updateGroup, updateLeg]
+    );
+    const rejectPendingPair = useCallback(
+        (groupId, message) => {
+            const proposalGroup = proposalGroupsRef.current.get(groupId);
+            proposalGroup?.proposals && Object.values(proposalGroup.proposals).forEach(record => {
+                pendingProposalsRef.current.delete(record.proposalId);
+                wsRef.current?.send(JSON.stringify({ forget: record.proposalId }));
+            });
+            const timeoutId = proposalGuardTimeoutsRef.current.get(groupId);
+            if (timeoutId) window.clearTimeout(timeoutId);
+            proposalGuardTimeoutsRef.current.delete(groupId);
+            proposalGroupsRef.current.delete(groupId);
+            setProposalError(message);
+            publishError(message);
+            if (pairGroupsRef.current[groupId]) {
+                updateGroup(groupId, current => ({ ...current, status: 'PAIR_ABORTED', error: message }));
+            }
+            processingRef.current = false;
+            setIsRunning(false);
+            runningRef.current = false;
+            run_panel?.setIsRunning?.(false);
+            run_panel?.setHasOpenContract?.(activeContractsRef.current.size > 0);
+            run_panel?.setContractStage?.(contract_stages.NOT_RUNNING);
+        },
+        [publishError, run_panel, updateGroup]
+    );
     const markError = useCallback(
         (context, message) => {
             setProposalError(message);
@@ -514,8 +562,14 @@ const PairedBot = () => {
             if (context?.group_id && context?.leg_key) {
                 updateLeg(context.group_id, context.leg_key, 'ERROR', { error: message });
             }
-            processingRef.current = false;
-            if (activeContractsRef.current.size === 0) {
+            const group = context?.group_id ? pairGroupsRef.current[context.group_id] : null;
+            const hasActiveLeg = group && LEG_KEYS.some(key => group.legs[key]?.contractId);
+            if (context?.group_id && hasActiveLeg) {
+                unwindGroup(context.group_id, message);
+            } else if (context?.group_id) {
+                rejectPendingPair(context.group_id, message);
+            } else {
+                processingRef.current = false;
                 setIsRunning(false);
                 runningRef.current = false;
                 run_panel?.setIsRunning?.(false);
@@ -523,26 +577,66 @@ const PairedBot = () => {
                 run_panel?.setContractStage?.(contract_stages.NOT_RUNNING);
             }
         },
-        [publishError, run_panel, updateLeg]
+        [publishError, rejectPendingPair, run_panel, unwindGroup, updateLeg]
     );
     const handleProposal = useCallback(
         data => {
             const proposal = data.proposal;
             const context = proposal?.passthrough || data.echo_req?.passthrough;
-            if (!proposal?.id || proposal.ask_price === undefined || !context?.group_id) {
+            if (!proposal?.id || proposal.ask_price === undefined || !context?.group_id || !context?.leg_key) {
                 markError(context, 'Proposal response did not identify its paired leg.');
                 return;
             }
-            pendingProposalsRef.current.set(String(proposal.id), context);
+            const proposalId = String(proposal.id);
+            const proposalGroup = proposalGroupsRef.current.get(context.group_id) || {
+                groupId: context.group_id,
+                proposals: {},
+                buyStarted: false,
+            };
+            if (proposalGroup.buyStarted || proposalGroup.proposals[context.leg_key]) return;
+            const record = {
+                ...context,
+                proposalId,
+                askPrice: Number(proposal.ask_price),
+                receivedAt: Date.now(),
+            };
+            pendingProposalsRef.current.set(proposalId, record);
+            proposalGroup.proposals[context.leg_key] = record;
+            proposalGroupsRef.current.set(context.group_id, proposalGroup);
+            const proposalKeys = Object.keys(proposalGroup.proposals);
+            if (proposalKeys.length === 1) {
+                const timeoutId = window.setTimeout(() => {
+                    const current = proposalGroupsRef.current.get(context.group_id);
+                    if (current && Object.keys(current.proposals).length < LEG_KEYS.length) {
+                        rejectPendingPair(context.group_id, 'Paired proposals did not arrive within 1.5 seconds. No leg was bought.');
+                    }
+                }, PROPOSAL_PAIR_MAX_SKEW_MS);
+                proposalGuardTimeoutsRef.current.set(context.group_id, timeoutId);
+                return;
+            }
+            const proposalA = proposalGroup.proposals.A;
+            const proposalB = proposalGroup.proposals.B;
+            if (!proposalA || !proposalB) {
+                rejectPendingPair(context.group_id, 'Both paired proposal callbacks are required. No leg was bought.');
+                return;
+            }
+            const skew = Math.abs(proposalA.receivedAt - proposalB.receivedAt);
+            if (skew > PROPOSAL_PAIR_MAX_SKEW_MS) {
+                rejectPendingPair(context.group_id, 'Paired proposal quotes were not received close enough together. No leg was bought.');
+                return;
+            }
+            const timeoutId = proposalGuardTimeoutsRef.current.get(context.group_id);
+            if (timeoutId) window.clearTimeout(timeoutId);
+            proposalGuardTimeoutsRef.current.delete(context.group_id);
+            proposalGroup.buyStarted = true;
             run_panel?.setContractStage?.(contract_stages.PURCHASE_SENT);
-            wsRef.current?.send(
-                JSON.stringify({
-                    buy: proposal.id,
-                    price: proposal.ask_price,
-                })
-            );
+            [proposalA, proposalB].forEach(recordToBuy => {
+                wsRef.current?.send(
+                    JSON.stringify({ buy: recordToBuy.proposalId, price: recordToBuy.askPrice })
+                );
+            });
         },
-        [markError, run_panel]
+        [markError, rejectPendingPair, run_panel]
     );
     const handleBuy = useCallback(
         data => {
