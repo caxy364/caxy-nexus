@@ -130,7 +130,6 @@ const DrawerHeader = ({ is_clear_stat_disabled, is_mobile, is_drawer_open, onCle
 
 const DrawerContent = ({ active_index, is_drawer_open, active_tour, setActiveTabIndex, ...props }: TDrawerContent) => {
     const { isDesktop } = useDevice();
-    // Use the useBlockScroll hook to prevent body scrolling when drawer is open on mobile
 
     React.useEffect(() => {
         if (!isDesktop && is_drawer_open) {
@@ -267,7 +266,16 @@ const RunPanel = observer(() => {
     const { statistics } = transactions;
     const { active_tour, active_tab } = dashboard;
     const { total_payout, total_profit, total_stake, won_contracts, lost_contracts, number_of_runs } = statistics;
-    const { BOT_BUILDER, CHART, OVERLORD, ELITE_PRIME, SIGNALS , SMART_TRADER} = DBOT_TABS;
+    const { BOT_BUILDER, CHART, OVERLORD, ELITE_PRIME, SIGNALS, SMART_TRADER } = DBOT_TABS;
+
+    const hide_signal_footer = [
+        'hedge',
+        'dual-higher-lower',
+        'updown',
+        'oracle',
+        'elite',
+        'paired',
+    ].includes(dashboard?.selected_signal_component || '');
 
     React.useEffect(() => {
         onMount();
@@ -324,7 +332,7 @@ const RunPanel = observer(() => {
                     })}
                     contentClassName='run-panel__content'
                     header={header}
-                    footer={isDesktop && footer}
+                    footer={isDesktop && !hide_signal_footer && footer}
                     is_open={is_drawer_open}
                     toggleDrawer={toggleDrawer}
                     width={366}
