@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import { FaPlay, FaStop } from 'react-icons/fa';
 import { WS_SERVERS, isProduction } from '@/components/shared';
@@ -6,176 +6,565 @@ import { contract_stages } from '@/constants/contract-stage';
 import { run_panel as run_panel_tabs } from '@/constants/run-panel';
 import { observer } from '@/external/bot-skeleton';
 import { useStore } from '@/hooks/useStore';
-import './DualHigherLower.css';
+import './DualHighLowTicks.css';
 
-const WS_URL = isProduction() ? WS_SERVERS.PRODUCTION : WS_SERVERS.STAGING;
-const OPTIONS_URL = WS_URL.replace(/ws\/public$/, '');
+const DERIV_PUBLIC_WS_URL = isProduction() ? WS_SERVERS.PRODUCTION : WS_SERVERS.STAGING;
+const DERIV_OPTIONS_API_URL = DERIV_PUBLIC_WS_URL.replace(/ws\/public$/, '');
 const SYMBOLS = ['1HZ10V', 'R_10', '1HZ25V', 'R_25', '1HZ50V', 'R_50', '1HZ75V', 'R_75', '1HZ100V', 'R_100'];
-const CONTRACTS = ['TICKHIGH', 'TICKLOW'];
+const LEG_KEYS = ['A', 'B'];
+const LEG_CONFIG = {
+    A: { label: 'Tick High', contract_type: 'TICKHIGH' },
+    B: { label: 'Tick Low', contract_type: 'TICKLOW' },
+};
+const PROPOSAL_PAIR_MAX_SKEW_MS = 1800;
 
-const displaySymbol = symbol => symbol?.startsWith('1HZ') ? `${symbol.replace('1HZ', '').replace('V', '')}(1s)` : symbol?.startsWith('R_') ? symbol.replace('R_', 'V') : symbol;
-
-const getAuth = () => {
-    try {
-        const auth = JSON.parse(sessionStorage.getItem('auth_info') || '{}');
-        const accounts = JSON.parse(sessionStorage.getItem('deriv_accounts') || '[]');
-        const loginid = localStorage.getItem('active_loginid');
-        const account = accounts.find(item => item.account_id === loginid) || accounts.find(item => item.account_id?.startsWith('DOT')) || accounts[0];
-        return auth.access_token && account?.account_id ? { token: auth.access_token, account } : null;
-    } catch { return null; }
+const formatSymbol = symbol => {
+    if (!symbol) return '';
+    if (symbol.startsWith('1HZ')) return `${symbol.replace('1HZ', '').replace('V', '')}(1s)`;
+    if (symbol.startsWith('R_')) return symbol.replace('R_', 'V');
+    return symbol;
 };
 
+const getAuthContext = () => {
+    try {
+        const auth = JSON.parse(sessionStorage.getItem('auth_info') || 'null');
+        const accounts = JSON.parse(sessionStorage.getItem('deriv_accounts') || 'null');
+        if (!auth?.access_token || !Array.isArray(accounts) || accounts.length === 0) return null;
+
+        const activeLoginId = localStorage.getItem('active_loginid');
+        const activeAccount =
+            accounts.find(account => account.account_id === activeLoginId) ||
+            accounts.find(account => account.account_id?.startsWith('DOT')) ||
+            accounts[0];
+
+        return activeAccount?.account_id ? { accessToken: auth.access_token, activeAccount } : null;
+    } catch (error) {
+        console.error('[DualHighLowTicks] Failed to read auth context:', error);
+        return null;
+    }
+};
+
+const createIdleGroup = symbol => ({
+    groupId: null,
+    symbol,
+    status: 'IDLE',
+    legs: {
+        A: { label: LEG_CONFIG.A.label, state: 'IDLE', profit: null, error: '' },
+        B: { label: LEG_CONFIG.B.label, state: 'IDLE', profit: null, error: '' },
+    },
+});
+
 const DualHighLowTicks = () => {
-    const { transactions, journal, summary_card, run_panel, client } = useStore() || {};
-    const [running, setRunning] = useState(false);
-    const [symbol, setSymbol] = useState('R_10');
+    const store = useStore();
+    const { transactions, journal, summary_card, run_panel, client } = store || {};
+    const [selectedSymbol, setSelectedSymbol] = useState('R_50');
     const [selectedTick, setSelectedTick] = useState('3');
     const [stake, setStake] = useState('1');
-    const [target, setTarget] = useState('100');
+    const [targetProfit, setTargetProfit] = useState('100');
     const [stopLoss, setStopLoss] = useState('100');
-    const [mode, setMode] = useState('net');
-    const [factor, setFactor] = useState('2.1');
-    const [error, setError] = useState('');
+    const [isRunning, setIsRunning] = useState(false);
+    const [pairStatus, setPairStatus] = useState(createIdleGroup('R_50'));
+    const [proposalError, setProposalError] = useState('');
+    const [totalProfit, setTotalProfit] = useState(0);
 
-    const ws = useRef(null);
+    const wsRef = useRef(null);
     const runningRef = useRef(false);
-    const processingRef = useRef(false);
-    const activeRef = useRef(new Set());
-    const completedRef = useRef(new Set());
-    const metadataRef = useRef({});
-    const pendingRef = useRef(new Map());
-    const nextStakeRef = useRef({ TICKHIGH: 1, TICKLOW: 1 });
+    const activeContractsRef = useRef(new Set());
+    const completedContractsRef = useRef(new Set());
+    const contractMetaRef = useRef({});
+    const groupRef = useRef(null);
+    const pendingBuyContextRef = useRef(new Map());
+    const pendingProposalRef = useRef(new Map());
+    const pairGuardTimeoutRef = useRef(null);
     const totalProfitRef = useRef(0);
+    const proposalGroupRef = useRef({});
 
-    const publish = useCallback(contract => {
-        transactions?.onBotContractEvent?.(contract);
-        summary_card?.onBotContractEvent?.(contract);
-    }, [summary_card, transactions]);
+    const publishContract = useCallback(
+        contract => {
+            transactions?.onBotContractEvent?.(contract);
+            summary_card?.onBotContractEvent?.(contract);
+        },
+        [summary_card, transactions]
+    );
 
-    const reportError = useCallback(message => {
-        setError(message || 'Unknown Deriv API error');
-        journal?.onError?.(message || 'Unknown Deriv API error');
+    const publishResult = useCallback(
+        contract => {
+            journal?.onLogSuccess?.({
+                log_type: Number(contract.profit || 0) > 0 ? 'profit' : 'lost',
+                extra: {
+                    currency: contract.currency || client?.currency || 'USD',
+                    profit: Number(contract.profit || 0),
+                },
+            });
+        },
+        [client?.currency, journal]
+    );
+
+    const publishError = useCallback(message => {
+        journal?.onError?.(message);
+        setProposalError(message);
     }, [journal]);
 
-    const authUrl = useCallback(async () => {
-        const context = getAuth();
-        if (!context) return null;
-        try {
-            const response = await fetch(`${OPTIONS_URL}accounts/${context.account.account_id}/otp`, { method: 'POST', headers: { Authorization: `Bearer ${context.token}` } });
-            const data = await response.json();
-            return data?.data?.url || null;
-        } catch { return null; }
-    }, []);
-
-    const stop = useCallback((reason = '') => {
-        runningRef.current = false;
-        processingRef.current = false;
-        setRunning(false);
-        pendingRef.current.clear();
-        if (ws.current?.readyState === WebSocket.OPEN) {
-            ws.current.send(JSON.stringify({ forget_all: 'proposal' }));
-            ws.current.send(JSON.stringify({ forget_all: 'proposal_open_contract' }));
-        }
-        run_panel?.setIsRunning?.(false);
-        run_panel?.setHasOpenContract?.(false);
-        run_panel?.setContractStage?.(contract_stages.NOT_RUNNING);
-        if (reason) setError(reason);
-    }, [run_panel]);
-
-    const finish = useCallback(contract => {
-        const id = String(contract.contract_id || '');
-        if (!id || completedRef.current.has(id)) return;
-        completedRef.current.add(id);
-        activeRef.current.delete(id);
-        const value = Number(contract.profit || 0);
-        totalProfitRef.current += value;
-        const meta = metadataRef.current[id] || {};
-        const result = { ...meta, ...contract, id: contract.contract_id, contract_id: contract.contract_id, result: value > 0 ? 'won' : 'lost', status: value > 0 ? 'won' : 'lost', is_sold: true };
-        publish(result);
-        journal?.onLogSuccess?.({ log_type: value > 0 ? 'profit' : 'lost', extra: { currency: client?.currency || 'USD', profit: value } });
-
-        if (mode === 'split') {
-            const side = meta.contract_type === 'TICKHIGH' ? 'TICKHIGH' : 'TICKLOW';
-            nextStakeRef.current[side] = value < 0 ? Number((nextStakeRef.current[side] * Number(factor || 1)).toFixed(2)) : Number(stake || 1);
-        }
-        if (!activeRef.current.size) {
-            processingRef.current = false;
-            if (mode === 'net') {
-                if (totalProfitRef.current < 0) CONTRACTS.forEach(type => { nextStakeRef.current[type] = Number((nextStakeRef.current[type] * Number(factor || 1)).toFixed(2)); });
-                else CONTRACTS.forEach(type => { nextStakeRef.current[type] = Number(stake || 1); });
+    const stopBot = useCallback(
+        (reason = 'Bot stopped.') => {
+            setIsRunning(false);
+            runningRef.current = false;
+            if (pairGuardTimeoutRef.current) {
+                window.clearTimeout(pairGuardTimeoutRef.current);
+                pairGuardTimeoutRef.current = null;
             }
-            const limit = totalProfitRef.current >= Number(target || 0) || totalProfitRef.current <= -Number(stopLoss || 0);
-            if (limit) { stop('Session ended by target/stop loss.'); Swal.fire('Session Ended', `Final P/L: ${totalProfitRef.current.toFixed(2)} USD`, 'info'); }
-            else run_panel?.setContractStage?.(contract_stages.CONTRACT_CLOSED);
-        }
-    }, [client?.currency, factor, journal, mode, publish, run_panel, stake, stop, stopLoss, target]);
+            if (wsRef.current?.readyState === WebSocket.OPEN) {
+                wsRef.current.send(JSON.stringify({ forget_all: 'proposal' }));
+                wsRef.current.send(JSON.stringify({ forget_all: 'proposal_open_contract' }));
+            }
+            run_panel?.setIsRunning?.(false);
+            run_panel?.setHasOpenContract?.(activeContractsRef.current.size > 0);
+            run_panel?.setContractStage?.(contract_stages.NOT_RUNNING);
+            setPairStatus(createIdleGroup(selectedSymbol));
+            console.log(`[DualHighLowTicks] ${reason}`);
+        },
+        [run_panel, selectedSymbol]
+    );
 
-    const sendPair = useCallback(() => {
-        if (ws.current?.readyState !== WebSocket.OPEN) return;
-        const groupId = `dual-tick-${symbol}-${Date.now()}`;
-        CONTRACTS.forEach(type => {
-            const amount = Number(nextStakeRef.current[type].toFixed(2));
-            ws.current.send(JSON.stringify({ proposal: 1, basis: 'stake', amount, currency: client?.currency || 'USD', underlying_symbol: symbol, contract_type: type, duration: 5, duration_unit: 't', selected_tick: Number(selectedTick), passthrough: { symbol, custom_type: type, sent_stake: amount, group_id: groupId, selected_tick: Number(selectedTick) } }));
+    const getAuthenticatedUrl = useCallback(async () => {
+        try {
+            const context = getAuthContext();
+            if (!context) throw new Error('Session Missing');
+
+            const response = await fetch(`${DERIV_OPTIONS_API_URL}accounts/${context.activeAccount.account_id}/otp`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${context.accessToken}` },
+            });
+            if (!response.ok) throw new Error('OTP Request Failed');
+
+            const json = await response.json();
+            if (!json?.data?.url) throw new Error('Authenticated URL Missing');
+            return json.data.url;
+        } catch (error) {
+            publishError(error.message);
+            return null;
+        }
+    }, [publishError]);
+
+    const connectSocket = useCallback(
+        async ({ requireAuth = false } = {}) => {
+            if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) {
+                return true;
+            }
+
+            const authenticatedUrl = requireAuth ? await getAuthenticatedUrl() : null;
+            if (requireAuth && !authenticatedUrl) return false;
+
+            wsRef.current = new WebSocket(authenticatedUrl || DERIV_PUBLIC_WS_URL);
+
+            wsRef.current.onopen = () => {
+                wsRef.current?.send(JSON.stringify({ active_symbols: 'full' }));
+                wsRef.current?.send(JSON.stringify({ contracts_for: selectedSymbol }));
+                wsRef.current?.send(JSON.stringify({ ticks: selectedSymbol, subscribe: 1 }));
+                wsRef.current?.send(JSON.stringify({ transaction: 1, subscribe: 1 }));
+            };
+
+            wsRef.current.onmessage = event => {
+                let data;
+                try {
+                    data = JSON.parse(event.data);
+                } catch {
+                    return;
+                }
+
+                if (data.error) {
+                    const context = data.echo_req?.passthrough || pendingBuyContextRef.current.get(String(data.echo_req?.buy || ''));
+                    if (context?.group_id) {
+                        setProposalError(data.error.message || 'Buy failed.');
+                    }
+                    return;
+                }
+
+                if (data.msg_type === 'active_symbols' || data.msg_type === 'contracts_for') {
+                    return;
+                }
+
+                if (data.msg_type === 'proposal' && data.proposal) {
+                    const proposal = data.proposal;
+                    const context = proposal?.passthrough || data.echo_req?.passthrough;
+                    if (!context?.group_id || !context?.leg_key) return;
+
+                    pendingProposalRef.current.set(String(proposal.id), context);
+                    proposalGroupRef.current[context.group_id] = proposalGroupRef.current[context.group_id] || { proposals: {} };
+                    proposalGroupRef.current[context.group_id].proposals[context.leg_key] = {
+                        proposalId: proposal.id,
+                        askPrice: Number(proposal.ask_price),
+                        receivedAt: Date.now(),
+                        symbol: context.symbol,
+                        groupId: context.group_id,
+                        legKey: context.leg_key,
+                        contractType: context.deriv_contract_type,
+                        sentStake: context.sent_stake,
+                    };
+
+                    if (Object.keys(proposalGroupRef.current[context.group_id].proposals).length === 2) {
+                        const proposalA = proposalGroupRef.current[context.group_id].proposals.A;
+                        const proposalB = proposalGroupRef.current[context.group_id].proposals.B;
+                        const skew = Math.abs(proposalA.receivedAt - proposalB.receivedAt);
+                        if (skew <= PROPOSAL_PAIR_MAX_SKEW_MS) {
+                            const buyTimeout = window.setTimeout(() => {
+                                const group = proposalGroupRef.current[context.group_id];
+                                if (!group) return;
+                                const bothReady = ['A', 'B'].every(key => !!group.proposals[key]);
+                                if (!bothReady) {
+                                    setProposalError('Both pair proposals were not received in time.');
+                                    stopBot('Pair proposal timeout.');
+                                }
+                            }, PROPOSAL_PAIR_MAX_SKEW_MS);
+                            if (pairGuardTimeoutRef.current) window.clearTimeout(pairGuardTimeoutRef.current);
+                            pairGuardTimeoutRef.current = buyTimeout;
+                            [proposalA, proposalB].forEach(record => {
+                                wsRef.current?.send(JSON.stringify({ buy: record.proposalId, price: record.askPrice }));
+                            });
+                        } else {
+                            setProposalError('The dual tick pair proposals were not received closely enough together.');
+                            stopBot('Proposal skew too large.');
+                        }
+                    }
+                    return;
+                }
+
+                if (data.msg_type === 'buy' && data.buy) {
+                    const buy = data.buy;
+                    const context = pendingProposalRef.current.get(String(data.echo_req?.buy || '')) || buy.passthrough || {};
+                    pendingProposalRef.current.delete(String(data.echo_req?.buy || ''));
+
+                    if (!buy.contract_id || !context.group_id || !context.leg_key) return;
+
+                    const contractKey = String(buy.contract_id);
+                    activeContractsRef.current.add(contractKey);
+                    contractMetaRef.current[contractKey] = {
+                        id: buy.contract_id,
+                        contract_id: buy.contract_id,
+                        transaction_ids: { buy: buy.transaction_id },
+                        buy_price: buy.buy_price ?? Number(context.sent_stake),
+                        currency: client?.currency || 'USD',
+                        display_name: formatSymbol(context.symbol),
+                        underlying: context.symbol,
+                        underlying_symbol: context.symbol,
+                        contract_type: context.deriv_contract_type || context.custom_type,
+                        longcode: buy.longcode,
+                        group_id: context.group_id,
+                        leg_key: context.leg_key,
+                        status: 'open',
+                        is_sold: false,
+                    };
+
+                    publishContract(contractMetaRef.current[contractKey]);
+                    run_panel?.setHasOpenContract?.(true);
+                    run_panel?.setContractStage?.(contract_stages.PURCHASE_RECEIVED);
+                    wsRef.current?.send(JSON.stringify({ proposal_open_contract: 1, contract_id: buy.contract_id, subscribe: 1 }));
+
+                    setPairStatus(current => ({
+                        ...current,
+                        groupId: context.group_id,
+                        status: 'PAIR_ACTIVE',
+                        legs: {
+                            ...current.legs,
+                            [context.leg_key]: { ...current.legs[context.leg_key], state: 'ACTIVE' },
+                        },
+                    }));
+                    return;
+                }
+
+                if (data.msg_type === 'proposal_open_contract') {
+                    const contract = data.proposal_open_contract;
+                    if (!contract || !contract.contract_id) return;
+
+                    const contractKey = String(contract.contract_id);
+                    const meta = contractMetaRef.current[contractKey] || {};
+                    const isComplete =
+                        contract.is_sold === 1 ||
+                        contract.is_sold === true ||
+                        contract.is_sold === '1' ||
+                        String(contract.status || '').toLowerCase() === 'won' ||
+                        String(contract.status || '').toLowerCase() === 'lost';
+
+                    const finalContract = {
+                        ...meta,
+                        ...contract,
+                        id: contract.contract_id,
+                        contract_id: contract.contract_id,
+                        group_id: meta.group_id,
+                        leg_key: meta.leg_key,
+                        underlying: contract.underlying || meta.symbol,
+                        underlying_symbol: contract.underlying_symbol || meta.symbol,
+                        is_sold: isComplete,
+                    };
+                    publishContract(finalContract);
+
+                    if (isComplete && activeContractsRef.current.has(contractKey)) {
+                        const profit = Number(contract.profit || 0);
+                        completedContractsRef.current.add(contractKey);
+                        activeContractsRef.current.delete(contractKey);
+                        totalProfitRef.current += profit;
+                        setTotalProfit(totalProfitRef.current);
+
+                        const native = {
+                            ...finalContract,
+                            profit,
+                            result: profit > 0 ? 'won' : 'lost',
+                            status: profit > 0 ? 'won' : 'lost',
+                        };
+                        publishContract(native);
+                        publishResult(native);
+
+                        setPairStatus(current => ({
+                            ...current,
+                            legs: {
+                                ...current.legs,
+                                [meta.leg_key || 'A']: {
+                                    ...(current.legs[meta.leg_key || 'A'] || {}),
+                                    state: 'COMPLETE',
+                                    profit,
+                                    error: '',
+                                },
+                            },
+                        }));
+
+                        if (activeContractsRef.current.size === 0) {
+                            const hitLimit = totalProfitRef.current >= Number(targetProfit) || totalProfitRef.current <= -Number(stopLoss);
+                            if (hitLimit) {
+                                stopBot(`Session ended by target/stop loss: ${totalProfitRef.current.toFixed(2)}`);
+                                Swal.fire('Session Ended', `Final P/L: ${totalProfitRef.current.toFixed(2)} ${client?.currency || 'USD'}`, 'info');
+                            } else {
+                                run_panel?.setHasOpenContract?.(false);
+                                run_panel?.setContractStage?.(contract_stages.CONTRACT_CLOSED);
+                            }
+                        }
+                    }
+                }
+            };
+
+            wsRef.current.onerror = error => {
+                console.error('[DualHighLowTicks] WebSocket error:', error);
+            };
+
+            wsRef.current.onclose = () => {
+                if (runningRef.current) {
+                    setProposalError('Trading connection closed.');
+                    setIsRunning(false);
+                    runningRef.current = false;
+                }
+            };
+
+            return true;
+        },
+        [client?.currency, publishContract, publishResult, run_panel, selectedSymbol, stopBot, stopLoss, targetProfit]
+    );
+
+    const executePair = useCallback(async () => {
+        if (runningRef.current) {
+            stopBot('Bot already running.');
+            return;
+        }
+
+        const numericStake = Number(stake);
+        if (!Number.isFinite(numericStake) || numericStake <= 0) {
+            setProposalError('Stake must be greater than zero.');
+            return;
+        }
+
+        const tickNumber = Number(selectedTick);
+        if (!Number.isInteger(tickNumber) || tickNumber < 1 || tickNumber > 5) {
+            setProposalError('Selected tick must be an integer from 1 to 5.');
+            return;
+        }
+
+        const authExists = getAuthContext();
+        if (!authExists) {
+            Swal.fire('Error', 'Login Required', 'error');
+            return;
+        }
+
+        const connected = await connectSocket({ requireAuth: true });
+        if (!connected) {
+            setProposalError('Authentication failed.');
+            return;
+        }
+
+        const groupId = `dual-high-low-${Date.now()}`;
+        const group = {
+            groupId,
+            symbol: selectedSymbol,
+            status: 'PAIR_CREATED',
+            legs: {
+                A: { label: LEG_CONFIG.A.label, state: 'PENDING', profit: null, error: '' },
+                B: { label: LEG_CONFIG.B.label, state: 'PENDING', profit: null, error: '' },
+            },
+        };
+        groupRef.current = groupId;
+        proposalGroupRef.current[groupId] = { proposals: {} };
+        setPairStatus(group);
+        setProposalError('');
+        setTotalProfit(0);
+        totalProfitRef.current = 0;
+        activeContractsRef.current.clear();
+        completedContractsRef.current.clear();
+        contractMetaRef.current = {};
+
+        transactions?.clear?.();
+        summary_card?.clear?.();
+
+        run_panel?.setIsRunning?.(true);
+        run_panel?.setHasOpenContract?.(false);
+        run_panel?.setContractStage?.(contract_stages.STARTING);
+        run_panel?.toggleDrawer?.(true);
+        run_panel?.setActiveTabIndex?.(run_panel_tabs.TRANSACTIONS);
+
+        setIsRunning(true);
+        runningRef.current = true;
+
+        LEG_KEYS.forEach(key => {
+            const contractType = LEG_CONFIG[key].contract_type;
+            const proposalRequest = {
+                proposal: 1,
+                basis: 'stake',
+                amount: numericStake,
+                currency: client?.currency || 'USD',
+                underlying_symbol: selectedSymbol,
+                contract_type: contractType,
+                duration: 5,
+                duration_unit: 't',
+                selected_tick: tickNumber,
+                passthrough: {
+                    group_id: groupId,
+                    leg_key: key,
+                    custom_type: LEG_CONFIG[key].label,
+                    deriv_contract_type: contractType,
+                    symbol: selectedSymbol,
+                    sent_stake: numericStake,
+                },
+            };
+            wsRef.current?.send(JSON.stringify(proposalRequest));
         });
-    }, [client?.currency, selectedTick, symbol]);
+    }, [client?.currency, connectSocket, run_panel, selectedSymbol, selectedTick, stake, stopBot, summary_card, transactions]);
 
-    const onMessage = useCallback(event => {
-        const data = JSON.parse(event.data);
-        if (data.error) { processingRef.current = false; reportError(data.error.message); return; }
-        if (data.msg_type === 'tick') {
-            if (runningRef.current && !activeRef.current.size && !processingRef.current) { processingRef.current = true; sendPair(); }
+    const toggleBot = useCallback(() => {
+        if (isRunning) {
+            stopBot('Manual stop.');
             return;
         }
-        if (data.msg_type === 'proposal' && data.proposal) {
-            const context = data.proposal.passthrough || data.echo_req?.passthrough || {};
-            pendingRef.current.set(String(data.proposal.id), context);
-            run_panel?.setContractStage?.(contract_stages.PURCHASE_SENT);
-            ws.current?.send(JSON.stringify({ buy: data.proposal.id, price: data.proposal.ask_price }));
-            return;
-        }
-        if (data.msg_type === 'buy' && data.buy) {
-            const context = pendingRef.current.get(String(data.echo_req?.buy)) || {};
-            pendingRef.current.delete(String(data.echo_req?.buy));
-            const id = String(data.buy.contract_id);
-            activeRef.current.add(id);
-            metadataRef.current[id] = { id: data.buy.contract_id, contract_id: data.buy.contract_id, transaction_ids: { buy: data.buy.transaction_id }, buy_price: data.buy.buy_price, currency: client?.currency || 'USD', display_name: displaySymbol(context.symbol), underlying: context.symbol, underlying_symbol: context.symbol, contract_type: context.custom_type, selected_tick: context.selected_tick, group_id: context.group_id, status: 'open' };
-            publish(metadataRef.current[id]);
-            run_panel?.setHasOpenContract?.(true);
-            run_panel?.setContractStage?.(contract_stages.PURCHASE_RECEIVED);
-            ws.current.send(JSON.stringify({ proposal_open_contract: 1, contract_id: data.buy.contract_id, subscribe: 1 }));
-            return;
-        }
-        if (data.msg_type === 'proposal_open_contract' && data.proposal_open_contract) {
-            const contract = data.proposal_open_contract;
-            const status = String(contract.status || '').toLowerCase();
-            const sold = contract.is_sold === 1 || contract.is_sold === true || contract.is_expired === 1 || (status && status !== 'open');
-            const meta = metadataRef.current[String(contract.contract_id)] || {};
-            publish({ ...meta, ...contract, id: contract.contract_id, contract_id: contract.contract_id, is_sold: sold });
-            if (sold) finish(contract);
-        }
-    }, [client?.currency, finish, publish, reportError, run_panel, sendPair]);
+        executePair();
+    }, [executePair, isRunning, stopBot]);
 
-    const start = useCallback(async () => {
-        if (!getAuth()) return Swal.fire('Error', 'Login Required', 'error');
-        if (running) return stop();
-        const url = await authUrl();
-        if (!url) return reportError('Unable to authenticate with Deriv.');
-        transactions?.clear?.(); summary_card?.clear?.();
-        totalProfitRef.current = 0; activeRef.current.clear(); completedRef.current.clear(); metadataRef.current = {}; processingRef.current = false;
-        nextStakeRef.current = { TICKHIGH: Number(stake || 1), TICKLOW: Number(stake || 1) };
-        ws.current = new WebSocket(url);
-        ws.current.onopen = () => { ws.current.send(JSON.stringify({ ticks: symbol, subscribe: 1 })); ws.current.send(JSON.stringify({ transaction: 1, subscribe: 1 })); };
-        ws.current.onmessage = onMessage;
-        ws.current.onerror = () => reportError('WebSocket connection error.');
-        ws.current.onclose = () => { if (runningRef.current) reportError('Connection closed.'); };
-        runningRef.current = true; setRunning(true); setError('');
-        run_panel?.setIsRunning?.(true); run_panel?.setHasOpenContract?.(false); run_panel?.setContractStage?.(contract_stages.STARTING); run_panel?.toggleDrawer?.(true); run_panel?.setActiveTabIndex?.(run_panel_tabs.TRANSACTIONS);
-    }, [authUrl, onMessage, reportError, run_panel, running, stake, stop, summary_card, symbol, transactions]);
+    useEffect(() => {
+        const shouldAuthenticate = Boolean(getAuthContext());
+        connectSocket({ requireAuth: shouldAuthenticate });
+        return () => {
+            if (wsRef.current) {
+                wsRef.current.close();
+                wsRef.current = null;
+            }
+            if (pairGuardTimeoutRef.current) {
+                window.clearTimeout(pairGuardTimeoutRef.current);
+            }
+        };
+    }, [connectSocket]);
 
-    useEffect(() => () => { runningRef.current = false; ws.current?.close(); }, []);
-    useEffect(() => { observer.register('dualhighlowticks.start', start); observer.register('dualhighlowticks.stop', stop); return () => { observer.unregister('dualhighlowticks.start', start); observer.unregister('dualhighlowticks.stop', stop); }; }, [start, stop]);
+    const statusText = useMemo(() => {
+        if (isRunning) return 'LIVE';
+        return 'STANDBY';
+    }, [isRunning]);
 
-    return <div className='dhl-tool'><header><h1>Dual High/Low Ticks</h1><p>Executes High Tick and Low Tick together. Each contract has the strict Deriv duration of five ticks.</p></header><div className='dhl-settings'><label>Volatility<select value={symbol} onChange={e => setSymbol(e.target.value)} disabled={running}>{SYMBOLS.map(item => <option key={item} value={item}>{displaySymbol(item)}</option>)}</select></label><label>Selected tick<select value={selectedTick} onChange={e => setSelectedTick(e.target.value)} disabled={running}>{[1, 2, 3, 4, 5].map(item => <option key={item} value={item}>Tick {item}</option>)}</select></label><label>Duration<strong>5 ticks</strong></label><label>Stake<input type='number' step='0.01' value={stake} onChange={e => setStake(e.target.value)} disabled={running} /></label><label>Target Profit<input type='number' value={target} onChange={e => setTarget(e.target.value)} disabled={running} /></label><label>Stop Loss<input type='number' value={stopLoss} onChange={e => setStopLoss(e.target.value)} disabled={running} /></label><label>Martingale<select value={mode} onChange={e => setMode(e.target.value)} disabled={running}><option value='net'>When BOTH lose</option><option value='split'>On every loss</option></select></label><label>Multiplier<input type='number' step='0.1' value={factor} onChange={e => setFactor(e.target.value)} disabled={running} /></label></div><button type='button' className={running ? 'stop' : ''} onClick={start}>{running ? <FaStop /> : <FaPlay />} {running ? ' STOP BOT' : ' EXECUTE TRADES'}</button>{error && <p className='dhl-error'>{error}</p>}</div>;
+    return (
+        <div className='dhl-tool'>
+            <div className='dhl-header'>
+                <div>
+                    <span className='dhl-kicker'>Paired hedging</span>
+                    <h1>Dual High / Low Ticks</h1>
+                    <p>Open both legs together using the same tick and duration. One leg is intended to hedge the other.</p>
+                </div>
+                <span className={`dhl-run-state ${isRunning ? 'is-live' : 'is-idle'}`}>{statusText}</span>
+            </div>
+
+            <div className='dhl-controls'>
+                <label className='dhl-field'>
+                    <span>Volatility / market</span>
+                    <select value={selectedSymbol} onChange={event => setSelectedSymbol(event.target.value)} disabled={isRunning}>
+                        {SYMBOLS.map(symbol => (
+                            <option key={symbol} value={symbol}>{formatSymbol(symbol)}</option>
+                        ))}
+                    </select>
+                </label>
+
+                <label className='dhl-field'>
+                    <span>Selected tick</span>
+                    <select value={selectedTick} onChange={event => setSelectedTick(event.target.value)} disabled={isRunning}>
+                        {[1, 2, 3, 4, 5].map(tick => (
+                            <option key={tick} value={tick}>Tick {tick}</option>
+                        ))}
+                    </select>
+                </label>
+
+                <label className='dhl-field'>
+                    <span>Stake per leg</span>
+                    <input type='number' min='0.01' step='0.01' value={stake} onChange={event => setStake(event.target.value)} disabled={isRunning} />
+                </label>
+
+                <label className='dhl-field'>
+                    <span>Target P/L</span>
+                    <input type='number' step='0.01' value={targetProfit} onChange={event => setTargetProfit(event.target.value)} disabled={isRunning} />
+                </label>
+
+                <label className='dhl-field'>
+                    <span>Stop loss</span>
+                    <input type='number' min='0' step='0.01' value={stopLoss} onChange={event => setStopLoss(event.target.value)} disabled={isRunning} />
+                </label>
+
+                <div className='dhl-field dhl-field--readonly'>
+                    <span>Duration</span>
+                    <strong>5 ticks fixed</strong>
+                </div>
+            </div>
+
+            <div className='dhl-actions'>
+                <button type='button' className={`dhl-run-button ${isRunning ? 'is-stop' : ''}`} onClick={toggleBot}>
+                    {isRunning ? <FaStop /> : <FaPlay />}
+                    {isRunning ? 'Stop hedged pair' : 'Execute trades'}
+                </button>
+                <div className='dhl-metrics'>
+                    <span>Session P/L <strong className={totalProfit >= 0 ? 'is-positive' : 'is-negative'}>{totalProfit.toFixed(2)}</strong></span>
+                </div>
+            </div>
+
+            {proposalError && <div className='dhl-error' role='alert'>{proposalError}</div>}
+
+            <div className='dhl-pair-summary'>
+                <div>
+                    <span className='dhl-kicker'>Selected pair</span>
+                    <strong>Tick High / Tick Low</strong>
+                    <p>Both legs share the same symbol, duration, and selected tick, and are executed as one paired hedge.</p>
+                </div>
+                <div className='dhl-group-id'>
+                    <span>Group</span>
+                    <code>{pairStatus.groupId || 'Not created'}</code>
+                </div>
+                <div className='dhl-status-pill'>{String(pairStatus.status || 'IDLE').replace(/_/g, ' ')}</div>
+            </div>
+
+            <div className='dhl-legs'>
+                {LEG_KEYS.map(key => (
+                    <div className={`dhl-leg-card dhl-leg-card--${String(pairStatus.legs[key].state || 'idle').toLowerCase()}`} key={key}>
+                        <div className='dhl-leg-heading'>
+                            <span>LEG {key}</span>
+                            <strong>{LEG_CONFIG[key].label}</strong>
+                        </div>
+                        <div className='dhl-leg-state'>{String(pairStatus.legs[key].state || 'IDLE').replace(/_/g, ' ')}</div>
+                        {pairStatus.legs[key].profit !== null && (
+                            <div className='dhl-leg-profit'>P/L: {Number(pairStatus.legs[key].profit).toFixed(2)}</div>
+                        )}
+                        {pairStatus.legs[key].error && <div className='dhl-leg-error'>{pairStatus.legs[key].error}</div>}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
 };
 
 export default DualHighLowTicks;
