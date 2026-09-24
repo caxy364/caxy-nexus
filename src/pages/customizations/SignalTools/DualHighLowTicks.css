@@ -1,0 +1,246 @@
+.dhl-tool {
+    width: calc(100% - 370px);
+    padding: 18px;
+    border: 1px solid #d8e3ee;
+    border-radius: 24px;
+    background: linear-gradient(180deg, #ffffff, #f4f8fc);
+    font-family: Manrope, "Segoe UI", sans-serif;
+    color: #102236;
+}
+
+.dhl-header,
+.dhl-actions,
+.dhl-pair-summary,
+.dhl-leg-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.dhl-header {
+    margin-bottom: 20px;
+}
+
+.dhl-kicker {
+    display: block;
+    margin-bottom: 5px;
+    color: #6d8195;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.dhl-header h1 {
+    margin: 0;
+    font-size: clamp(24px, 3vw, 36px);
+    line-height: 1.1;
+}
+
+.dhl-header p,
+.dhl-pair-summary p {
+    margin: 8px 0 0;
+    color: #668096;
+    line-height: 1.5;
+}
+
+.dhl-run-state,
+.dhl-status-pill {
+    border-radius: 999px;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.dhl-run-state.is-live {
+    background: #dff8eb;
+    color: #087443;
+}
+
+.dhl-run-state.is-idle,
+.dhl-status-pill {
+    background: #eaf0f6;
+    color: #536b80;
+}
+
+.dhl-controls {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+.dhl-field {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    min-width: 0;
+}
+
+.dhl-field > span {
+    color: #6d8195;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.dhl-field select,
+.dhl-field input {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #cbd9e6;
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: #ffffff;
+    color: #102236;
+    font: inherit;
+}
+
+.dhl-field--readonly {
+    justify-content: center;
+    border: 1px dashed #cbd9e6;
+    border-radius: 10px;
+    padding: 10px 12px;
+}
+
+.dhl-field--readonly strong {
+    font-size: 14px;
+}
+
+.dhl-actions {
+    margin-bottom: 18px;
+}
+
+.dhl-run-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 0;
+    border-radius: 12px;
+    padding: 12px 18px;
+    background: #1769aa;
+    color: #ffffff;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 800;
+}
+
+.dhl-run-button:hover {
+    background: #0f568e;
+}
+
+.dhl-run-button.is-stop {
+    background: #c43f4d;
+}
+
+.dhl-metrics {
+    color: #6d8195;
+    font-size: 13px;
+}
+
+.dhl-metrics strong,
+.dhl-leg-profit {
+    color: #087443;
+}
+
+.dhl-metrics strong.is-negative,
+.dhl-leg-card--complete .dhl-leg-profit {
+    color: #c43f4d;
+}
+
+.dhl-error,
+.dhl-leg-error {
+    border-radius: 10px;
+    background: #fff0f1;
+    color: #a32838;
+}
+
+.dhl-error {
+    margin-bottom: 16px;
+    padding: 11px 13px;
+}
+
+.dhl-pair-summary {
+    align-items: flex-start;
+    margin-bottom: 16px;
+    border-top: 1px solid #e0e9f1;
+    border-bottom: 1px solid #e0e9f1;
+    padding: 16px 0;
+}
+
+.dhl-group-id {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    color: #6d8195;
+    font-size: 12px;
+}
+
+.dhl-group-id code {
+    color: #102236;
+    font-size: 11px;
+}
+
+.dhl-legs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.dhl-leg-card {
+    border: 1px solid #d8e3ee;
+    border-radius: 14px;
+    padding: 15px;
+    background: #ffffff;
+}
+
+.dhl-leg-heading span,
+.dhl-leg-state {
+    color: #6d8195;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.dhl-leg-state {
+    margin-top: 18px;
+}
+
+.dhl-leg-profit {
+    margin-top: 10px;
+    font-weight: 800;
+}
+
+.dhl-leg-error {
+    margin-top: 10px;
+    padding: 8px;
+    font-size: 12px;
+}
+
+@media (max-width: 900px) {
+    .dhl-tool {
+        width: auto;
+    }
+
+    .dhl-controls {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 600px) {
+    .dhl-header,
+    .dhl-actions,
+    .dhl-pair-summary {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .dhl-controls,
+    .dhl-legs {
+        grid-template-columns: 1fr;
+    }
+}
