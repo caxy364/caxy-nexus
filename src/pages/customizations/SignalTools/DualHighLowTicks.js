@@ -69,10 +69,10 @@ const authContext = () => {
 
         const account =
             accounts?.find(
-                account => account.account_id === activeLoginId
+                acc => acc.account_id === activeLoginId
             ) ||
             accounts?.find(
-                account => account.account_id?.startsWith('DOT')
+                acc => acc.account_id?.startsWith('DOT')
             ) ||
             accounts?.[0];
 
@@ -168,7 +168,7 @@ const DualHighLowTicks = () => {
     const activeRef = useRef(new Set());
     const completedRef = useRef(new Set());
 
-    // Stores the current pair's individual results.
+    // Stores current pair's individual leg results
     const pairProfitRef = useRef({});
 
     const totalRef = useRef(0);
@@ -195,7 +195,7 @@ const DualHighLowTicks = () => {
     );
 
     // --------------------------------------------------
-    // Publish contract events to the existing UI/store
+    // Publish contract events to the store
     // --------------------------------------------------
 
     const publish = useCallback(
@@ -312,7 +312,6 @@ const DualHighLowTicks = () => {
             return;
         }
 
-        // Only one pair may be active at a time.
         if (activePairRef.current) {
             return;
         }
@@ -338,10 +337,8 @@ const DualHighLowTicks = () => {
 
         const groupId = `dhl-${Date.now()}-${currentTickRef.current}`;
 
-        // Reset pair result storage for the new pair.
         pairProfitRef.current = {};
 
-        // Create pair state.
         groupsRef.current.set(groupId, {
             proposals: {},
             buying: false,
@@ -385,7 +382,6 @@ const DualHighLowTicks = () => {
             },
         });
 
-        // Send both proposals
         ['A', 'B'].forEach(key => {
             const legStake = Number(
                 nextStakeRef.current[key].toFixed(2)
@@ -432,50 +428,43 @@ const DualHighLowTicks = () => {
     // Tick handler
     // --------------------------------------------------
 
-    const onTick = useCallback(
-        tickData => {
-            if (!runningRef.current) {
-                return;
-            }
+    const onTick = useCallback(() => {
+        if (!runningRef.current) {
+            return;
+        }
 
-            currentTickRef.current += 1;
+        currentTickRef.current += 1;
 
-            const activePair = activePairRef.current;
+        const activePair = activePairRef.current;
 
-            // Clear active pair ref if duration has elapsed and both legs settled
+        if (
+            activePair &&
+            currentTickRef.current >= activePair.endTick
+        ) {
             if (
-                activePair &&
-                currentTickRef.current >= activePair.endTick
+                activePair.settled.A &&
+                activePair.settled.B
             ) {
-                if (
-                    activePair.settled.A &&
-                    activePair.settled.B
-                ) {
-                    activePairRef.current = null;
-                }
+                activePairRef.current = null;
             }
+        }
 
-            // Do not create another pair while the current pair is active
-            if (activePairRef.current) {
-                return;
-            }
+        if (activePairRef.current) {
+            return;
+        }
 
-            // Schedule a new pair for the current tick
-            if (pendingStartTickRef.current === null) {
-                pendingStartTickRef.current = currentTickRef.current;
-            }
+        if (pendingStartTickRef.current === null) {
+            pendingStartTickRef.current = currentTickRef.current;
+        }
 
-            // Fire on scheduled tick
-            if (
-                pendingStartTickRef.current === currentTickRef.current &&
-                !activePairRef.current
-            ) {
-                pendingStartTickRef.current = null;
-                firePair();
-            }
-        },
-        [firePair]
-    );
+        if (
+            pendingStartTickRef.current === currentTickRef.current &&
+            !activePairRef.current
+        ) {
+            pendingStartTickRef.current = null;
+            firePair();
+        }
+    }, [firePair]);
 
     // --------------------------------------------------
     // WebSocket message handler
@@ -502,7 +491,7 @@ const DualHighLowTicks = () => {
             }
 
             if (data.msg_type === 'tick' && data.tick) {
-                onTick(data.tick);
+                onTick();
                 return;
             }
 
@@ -695,6 +684,7 @@ const DualHighLowTicks = () => {
                         ...current.legs,
                         [meta.leg_key]: {
                             ...current.legs[meta.leg_key],
+                            state: finished ? 'FINISHED' : 'ACTIVE',
                             entry,
                             exit,
                             profit: finished
@@ -919,15 +909,23 @@ const DualHighLowTicks = () => {
     }, []);
 
     return (
-        <div className="dual-high-low-ticks-container">
+        <div className="dhl-tool">
             <div className="dhl-header">
-                <h2>Dual High Low Ticks Bot</h2>
-                {error && <div className="dhl-error">{error}</div>}
+                <div>
+                    <span className="dhl-kicker">Deriv Automated Execution</span>
+                    <h1>Dual High Low Ticks Bot</h1>
+                    <p>Simultaneously execute Tick High and Tick Low contracts synchronously.</p>
+                </div>
+                <div className={`dhl-run-state ${running ? 'is-live' : 'is-idle'}`}>
+                    {running ? 'Running' : 'Idle'}
+                </div>
             </div>
 
+            {error && <div className="dhl-error">{error}</div>}
+
             <div className="dhl-controls">
-                <div className="control-group">
-                    <label>Symbol</label>
+                <div className="dhl-field">
+                    <span>Symbol</span>
                     <select
                         value={symbol}
                         onChange={e => setSymbol(e.target.value)}
@@ -941,8 +939,8 @@ const DualHighLowTicks = () => {
                     </select>
                 </div>
 
-                <div className="control-group">
-                    <label>Selected Tick (1-5)</label>
+                <div className="dhl-field">
+                    <span>Selected Tick (1-5)</span>
                     <input
                         type="number"
                         min="1"
@@ -953,8 +951,8 @@ const DualHighLowTicks = () => {
                     />
                 </div>
 
-                <div className="control-group">
-                    <label>Duration (Ticks)</label>
+                <div className="dhl-field">
+                    <span>Duration (Ticks)</span>
                     <input
                         type="number"
                         min="1"
@@ -964,8 +962,8 @@ const DualHighLowTicks = () => {
                     />
                 </div>
 
-                <div className="control-group">
-                    <label>Initial Stake</label>
+                <div className="dhl-field">
+                    <span>Initial Stake</span>
                     <input
                         type="number"
                         min="0.35"
@@ -976,8 +974,8 @@ const DualHighLowTicks = () => {
                     />
                 </div>
 
-                <div className="control-group">
-                    <label>Target Profit</label>
+                <div className="dhl-field">
+                    <span>Target Profit</span>
                     <input
                         type="number"
                         min="1"
@@ -987,8 +985,8 @@ const DualHighLowTicks = () => {
                     />
                 </div>
 
-                <div className="control-group">
-                    <label>Stop Loss</label>
+                <div className="dhl-field">
+                    <span>Stop Loss</span>
                     <input
                         type="number"
                         min="1"
@@ -998,8 +996,8 @@ const DualHighLowTicks = () => {
                     />
                 </div>
 
-                <div className="control-group">
-                    <label>Martingale Mode</label>
+                <div className="dhl-field">
+                    <span>Martingale Mode</span>
                     <select
                         value={martingaleMode}
                         onChange={e => setMartingaleMode(e.target.value)}
@@ -1010,8 +1008,8 @@ const DualHighLowTicks = () => {
                     </select>
                 </div>
 
-                <div className="control-group">
-                    <label>Multiplier</label>
+                <div className="dhl-field">
+                    <span>Multiplier</span>
                     <input
                         type="number"
                         step="0.1"
@@ -1021,53 +1019,77 @@ const DualHighLowTicks = () => {
                         disabled={running}
                     />
                 </div>
+
+                <div className="dhl-field dhl-field--readonly">
+                    <span>Active Currency</span>
+                    <strong>{client?.currency || 'USD'}</strong>
+                </div>
             </div>
 
             <div className="dhl-actions">
                 {!running ? (
-                    <button className="btn-start" onClick={start}>
+                    <button className="dhl-run-button" onClick={start}>
                         <FaPlay /> Run Bot
                     </button>
                 ) : (
-                    <button className="btn-stop" onClick={() => stop('User stopped')}>
+                    <button className="dhl-run-button is-stop" onClick={() => stop('User stopped')}>
                         <FaStop /> Stop Bot
                     </button>
                 )}
-            </div>
 
-            <div className="dhl-status-board">
-                <div className="summary-metric">
-                    <span>Total P/L: </span>
-                    <strong className={totalProfit >= 0 ? 'profit-positive' : 'profit-negative'}>
+                <div className="dhl-metrics">
+                    Total Session P/L:{' '}
+                    <strong className={totalProfit < 0 ? 'is-negative' : ''}>
                         {totalProfit.toFixed(2)} {client?.currency || 'USD'}
                     </strong>
                 </div>
+            </div>
 
-                <div className="legs-display">
-                    {['A', 'B'].map(key => {
-                        const leg = status.legs[key];
-                        return (
-                            <div key={key} className={`leg-card leg-${key.toLowerCase()}`}>
-                                <h4>{leg.label}</h4>
-                                <div className="leg-metric">
-                                    <span>State:</span> <strong>{leg.state}</strong>
-                                </div>
-                                <div className="leg-metric">
-                                    <span>Entry Spot:</span> <strong>{leg.entry}</strong>
-                                </div>
-                                <div className="leg-metric">
-                                    <span>Exit Spot:</span> <strong>{leg.exit || '-'}</strong>
-                                </div>
-                                <div className="leg-metric">
-                                    <span>Profit:</span>{' '}
-                                    <strong>
-                                        {leg.profit !== null ? leg.profit.toFixed(2) : '-'}
-                                    </strong>
-                                </div>
-                            </div>
-                        );
-                    })}
+            <div className="dhl-pair-summary">
+                <div className="dhl-group-id">
+                    <span>Current Pair Context</span>
+                    <code>{status.groupId || 'No active pair group'}</code>
                 </div>
+                <div className="dhl-status-pill">{status.status}</div>
+            </div>
+
+            <div className="dhl-legs">
+                {['A', 'B'].map(key => {
+                    const leg = status.legs[key];
+                    const isComplete = leg.state === 'FINISHED';
+
+                    return (
+                        <div
+                            key={key}
+                            className={`dhl-leg-card ${isComplete ? 'dhl-leg-card--complete' : ''}`}
+                        >
+                            <div className="dhl-leg-heading">
+                                <h3>{leg.label}</h3>
+                                <span>{key}</span>
+                            </div>
+
+                            <div className="dhl-leg-state">Status: {leg.state}</div>
+
+                            <div style={{ marginTop: '10px', fontSize: '13px' }}>
+                                <div>Entry Spot: <strong>{leg.entry}</strong></div>
+                                <div>Exit Spot: <strong>{leg.exit || '-'}</strong></div>
+                            </div>
+
+                            <div className="dhl-leg-profit">
+                                Profit:{' '}
+                                {leg.profit !== null ? (
+                                    <span style={{ color: leg.profit < 0 ? '#c43f4d' : '#087443' }}>
+                                        {leg.profit.toFixed(2)} {client?.currency || 'USD'}
+                                    </span>
+                                ) : (
+                                    '-'
+                                )}
+                            </div>
+
+                            {leg.error && <div className="dhl-leg-error">{leg.error}</div>}
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );
