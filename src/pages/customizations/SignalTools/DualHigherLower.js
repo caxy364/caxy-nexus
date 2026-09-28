@@ -52,7 +52,15 @@ const DualHigherLower = () => {
 
   const [isRunning, setIsRunning] = useState(false);
   const [selectedSymbol, setSelectedSymbol] = useState('R_10');
-  const [barrierOffset, setBarrierOffset] = useState('0.10');
+
+  // Independent HIGHER barrier controls
+  const [higherOffset, setHigherOffset] = useState('0.10');
+  const [higherSign, setHigherSign] = useState('+');
+
+  // Independent LOWER barrier controls
+  const [lowerOffset, setLowerOffset] = useState('0.10');
+  const [lowerSign, setLowerSign] = useState('-');
+
   const [duration, setDuration] = useState('1');
   const [durationUnit, setDurationUnit] = useState('t');
   const [stake, setStake] = useState('1');
@@ -160,9 +168,9 @@ const DualHigherLower = () => {
   const executeTradePair = useCallback(() => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
 
-    // Positive barrier for HIGHER (+0.10) and Negative barrier for LOWER (-0.10)
-    const positiveBarrier = `+${barrierOffset}`;
-    const negativeBarrier = `-${barrierOffset}`;
+    // Build specific barrier strings with selected signs
+    const higherBarrier = `${higherSign}${higherOffset}`;
+    const lowerBarrier = `${lowerSign}${lowerOffset}`;
 
     const higherStake = Number(nextStakeRef.current.HIGHER.toFixed(2));
     const lowerStake = Number(nextStakeRef.current.LOWER.toFixed(2));
@@ -176,36 +184,36 @@ const DualHigherLower = () => {
       duration_unit: durationUnit,
     };
 
-    // 1. Send HIGHER with Positive (+) Offset
+    // 1. Send HIGHER contract request
     wsRef.current.send(JSON.stringify({
       ...common,
       amount: higherStake,
       contract_type: 'HIGHER',
-      barrier: positiveBarrier,
+      barrier: higherBarrier,
       passthrough: {
         symbol: selectedSymbol,
         custom_type: 'HIGHER',
         sent_stake: higherStake,
-        barrier: positiveBarrier,
+        barrier: higherBarrier,
         group_id: groupId,
       },
     }));
 
-    // 2. Send LOWER with Negative (-) Offset
+    // 2. Send LOWER contract request
     wsRef.current.send(JSON.stringify({
       ...common,
       amount: lowerStake,
       contract_type: 'LOWER',
-      barrier: negativeBarrier,
+      barrier: lowerBarrier,
       passthrough: {
         symbol: selectedSymbol,
         custom_type: 'LOWER',
         sent_stake: lowerStake,
-        barrier: negativeBarrier,
+        barrier: lowerBarrier,
         group_id: groupId,
       },
     }));
-  }, [barrierOffset, client?.currency, duration, durationUnit, selectedSymbol]);
+  }, [client?.currency, duration, durationUnit, higherOffset, higherSign, lowerOffset, lowerSign, selectedSymbol]);
 
   const handleProposal = useCallback((data) => {
     const proposalId = data.proposal?.id;
@@ -510,7 +518,7 @@ const DualHigherLower = () => {
 
     totalProfitRef.current = 0;
     activeContractsRef.current.clear();
-    completedContractsRef.current.clear();
+    completedContractsRef.clear();
     contractMetaRef.current = {};
     pendingTradeContextsRef.current = [];
     pendingProposalContextsRef.current.clear();
@@ -594,10 +602,11 @@ const DualHigherLower = () => {
     <div className='dhl-tool'>
       <header>
         <h1>Dual Higher/Lower</h1>
-        <p>Manual execution bot for one selected volatility. Executes HIGHER with (+offset) and LOWER with (-offset) concurrently.</p>
+        <p>Manual execution bot with independent offsets and signs for HIGHER and LOWER contracts.</p>
       </header>
 
       <div className='dhl-settings'>
+        {/* Global Settings */}
         <label>
           Volatility
           <select value={selectedSymbol} onChange={(e) => setSelectedSymbol(e.target.value)} disabled={isRunning}>
@@ -607,11 +616,57 @@ const DualHigherLower = () => {
           </select>
         </label>
 
-        <label>
-          Offset Barrier
-          <input type='number' step='0.01' value={barrierOffset} onChange={(e) => setBarrierOffset(e.target.value)} disabled={isRunning} />
-        </label>
+        {/* HIGHER Specific Settings */}
+        <div className='dhl-group-card'>
+          <h3>HIGHER Settings</h3>
+          <div className='dhl-row'>
+            <label>
+              Offset Barrier
+              <input
+                type='number'
+                step='0.01'
+                placeholder='0.10'
+                value={higherOffset}
+                onChange={(e) => setHigherOffset(e.target.value)}
+                disabled={isRunning}
+              />
+            </label>
+            <label>
+              Sign
+              <select value={higherSign} onChange={(e) => setHigherSign(e.target.value)} disabled={isRunning}>
+                <option value='+'>Positive (+)</option>
+                <option value='-'>Negative (-)</option>
+              </select>
+            </label>
+          </div>
+        </div>
 
+        {/* LOWER Specific Settings */}
+        <div className='dhl-group-card'>
+          <h3>LOWER Settings</h3>
+          <div className='dhl-row'>
+            <label>
+              Offset Barrier
+              <input
+                type='number'
+                step='0.01'
+                placeholder='0.10'
+                value={lowerOffset}
+                onChange={(e) => setLowerOffset(e.target.value)}
+                disabled={isRunning}
+              />
+            </label>
+            <label>
+              Sign
+              <select value={lowerSign} onChange={(e) => setLowerSign(e.target.value)} disabled={isRunning}>
+                <option value='-'>Negative (-)</option>
+                <option value='+'>Positive (+)</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        {/* Contract Duration and Risk Management Settings */}
         <label>
           Duration
           <input type='number' min='1' value={duration} onChange={(e) => setDuration(e.target.value)} disabled={isRunning} />
@@ -665,8 +720,12 @@ const DualHigherLower = () => {
           <strong>{formatSymbolDisplay(selectedSymbol)}</strong>
         </div>
         <div>
-          <span>Higher / Lower Barriers</span>
-          <strong>+{barrierOffset} / -{barrierOffset}</strong>
+          <span>Higher Barrier</span>
+          <strong>{higherSign}{higherOffset}</strong>
+        </div>
+        <div>
+          <span>Lower Barrier</span>
+          <strong>{lowerSign}{lowerOffset}</strong>
         </div>
         <div>
           <span>Duration</span>
