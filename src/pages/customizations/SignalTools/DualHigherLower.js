@@ -168,10 +168,8 @@ const DualHigherLower = () => {
   const executeTradePair = useCallback(() => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
 
-    // Build specific barrier strings with selected signs
     const higherBarrier = `${higherSign}${higherOffset}`;
     const lowerBarrier = `${lowerSign}${lowerOffset}`;
-
     const higherStake = Number(nextStakeRef.current.HIGHER.toFixed(2));
     const lowerStake = Number(nextStakeRef.current.LOWER.toFixed(2));
     const groupId = `dualhl-${selectedSymbol}-${Date.now()}`;
@@ -184,7 +182,6 @@ const DualHigherLower = () => {
       duration_unit: durationUnit,
     };
 
-    // 1. Send HIGHER contract request
     wsRef.current.send(JSON.stringify({
       ...common,
       amount: higherStake,
@@ -199,7 +196,6 @@ const DualHigherLower = () => {
       },
     }));
 
-    // 2. Send LOWER contract request
     wsRef.current.send(JSON.stringify({
       ...common,
       amount: lowerStake,
@@ -602,11 +598,10 @@ const DualHigherLower = () => {
     <div className='dhl-tool'>
       <header>
         <h1>Dual Higher/Lower</h1>
-        <p>Manual execution bot with independent offsets and signs for HIGHER and LOWER contracts.</p>
+        <p>Manual execution bot for one selected volatility. Press Execute Trades, then it keeps opening the paired HIGHER/LOWER contract until you stop.</p>
       </header>
 
       <div className='dhl-settings'>
-        {/* Global Settings */}
         <label>
           Volatility
           <select value={selectedSymbol} onChange={(e) => setSelectedSymbol(e.target.value)} disabled={isRunning}>
@@ -616,57 +611,34 @@ const DualHigherLower = () => {
           </select>
         </label>
 
-        {/* HIGHER Specific Settings */}
-        <div className='dhl-group-card'>
-          <h3>HIGHER Settings</h3>
-          <div className='dhl-row'>
-            <label>
-              Offset Barrier
-              <input
-                type='number'
-                step='0.01'
-                placeholder='0.10'
-                value={higherOffset}
-                onChange={(e) => setHigherOffset(e.target.value)}
-                disabled={isRunning}
-              />
-            </label>
-            <label>
-              Sign
-              <select value={higherSign} onChange={(e) => setHigherSign(e.target.value)} disabled={isRunning}>
-                <option value='+'>Positive (+)</option>
-                <option value='-'>Negative (-)</option>
-              </select>
-            </label>
-          </div>
-        </div>
+        {/* HIGHER Offset Settings */}
+        <label>
+          Higher Offset Barrier
+          <input type='number' step='0.01' value={higherOffset} onChange={(e) => setHigherOffset(e.target.value)} disabled={isRunning} />
+        </label>
 
-        {/* LOWER Specific Settings */}
-        <div className='dhl-group-card'>
-          <h3>LOWER Settings</h3>
-          <div className='dhl-row'>
-            <label>
-              Offset Barrier
-              <input
-                type='number'
-                step='0.01'
-                placeholder='0.10'
-                value={lowerOffset}
-                onChange={(e) => setLowerOffset(e.target.value)}
-                disabled={isRunning}
-              />
-            </label>
-            <label>
-              Sign
-              <select value={lowerSign} onChange={(e) => setLowerSign(e.target.value)} disabled={isRunning}>
-                <option value='-'>Negative (-)</option>
-                <option value='+'>Positive (+)</option>
-              </select>
-            </label>
-          </div>
-        </div>
+        <label>
+          Higher Sign
+          <select value={higherSign} onChange={(e) => setHigherSign(e.target.value)} disabled={isRunning}>
+            <option value='+'>+</option>
+            <option value='-'>-</option>
+          </select>
+        </label>
 
-        {/* Contract Duration and Risk Management Settings */}
+        {/* LOWER Offset Settings */}
+        <label>
+          Lower Offset Barrier
+          <input type='number' step='0.01' value={lowerOffset} onChange={(e) => setLowerOffset(e.target.value)} disabled={isRunning} />
+        </label>
+
+        <label>
+          Lower Sign
+          <select value={lowerSign} onChange={(e) => setLowerSign(e.target.value)} disabled={isRunning}>
+            <option value='-'>-</option>
+            <option value='+'>+</option>
+          </select>
+        </label>
+
         <label>
           Duration
           <input type='number' min='1' value={duration} onChange={(e) => setDuration(e.target.value)} disabled={isRunning} />
