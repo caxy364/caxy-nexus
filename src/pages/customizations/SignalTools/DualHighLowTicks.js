@@ -42,6 +42,9 @@ const TERMINAL = new Set([
     'expired',
 ]);
 
+// Deriv TICKHIGH / TICKLOW contract duration is strictly fixed at 5 ticks
+const REQUIRED_DURATION_TICKS = 5;
+
 const formatSymbol = symbol => {
     if (symbol?.startsWith('1HZ')) {
         return `${symbol.replace('1HZ', '').replace('V', '')}(1s)`;
@@ -137,7 +140,6 @@ const DualHighLowTicks = () => {
 
     const [symbol, setSymbol] = useState('R_50');
     const [selectedTick, setSelectedTick] = useState('3');
-    const [duration, setDuration] = useState('3');
     const [stake, setStake] = useState('1');
     const [target, setTarget] = useState('100');
     const [stopLoss, setStopLoss] = useState('100');
@@ -317,20 +319,17 @@ const DualHighLowTicks = () => {
         }
 
         const amount = Number(stake);
-        const ticks = Number(duration);
         const tick = Number(selectedTick);
 
         if (
             !Number.isFinite(amount) ||
             amount <= 0 ||
-            !Number.isInteger(ticks) ||
-            ticks < 1 ||
             !Number.isInteger(tick) ||
             tick < 1 ||
             tick > 5
         ) {
             reportError(
-                'Invalid stake, selected tick, or duration.'
+                'Invalid stake or selected tick (must be between 1 and 5).'
             );
             return;
         }
@@ -347,7 +346,7 @@ const DualHighLowTicks = () => {
         activePairRef.current = {
             groupId,
             startTick: currentTickRef.current,
-            endTick: currentTickRef.current + ticks,
+            endTick: currentTickRef.current + REQUIRED_DURATION_TICKS,
             legs: {
                 A: null,
                 B: null,
@@ -394,7 +393,7 @@ const DualHighLowTicks = () => {
                 custom_type: LEGS[key].label,
                 deriv_contract_type: LEGS[key].type,
                 sent_stake: legStake,
-                duration: ticks,
+                duration: REQUIRED_DURATION_TICKS,
                 duration_unit: 't',
                 start_tick: currentTickRef.current,
                 selected_tick: tick,
@@ -408,7 +407,7 @@ const DualHighLowTicks = () => {
                     currency: client?.currency || 'USD',
                     underlying_symbol: symbol,
                     contract_type: LEGS[key].type,
-                    duration: ticks,
+                    duration: REQUIRED_DURATION_TICKS,
                     duration_unit: 't',
                     selected_tick: tick,
                     passthrough: context,
@@ -417,7 +416,6 @@ const DualHighLowTicks = () => {
         });
     }, [
         client?.currency,
-        duration,
         reportError,
         selectedTick,
         stake,
@@ -941,24 +939,26 @@ const DualHighLowTicks = () => {
 
                 <div className="dhl-field">
                     <span>Selected Tick (1-5)</span>
-                    <input
-                        type="number"
-                        min="1"
-                        max="5"
+                    <select
                         value={selectedTick}
                         onChange={e => setSelectedTick(e.target.value)}
                         disabled={running}
-                    />
+                    >
+                        <option value="1">1st Tick</option>
+                        <option value="2">2nd Tick</option>
+                        <option value="3">3rd Tick</option>
+                        <option value="4">4th Tick</option>
+                        <option value="5">5th Tick</option>
+                    </select>
                 </div>
 
                 <div className="dhl-field">
                     <span>Duration (Ticks)</span>
                     <input
                         type="number"
-                        min="1"
-                        value={duration}
-                        onChange={e => setDuration(e.target.value)}
-                        disabled={running}
+                        value={REQUIRED_DURATION_TICKS}
+                        disabled
+                        readOnly
                     />
                 </div>
 
