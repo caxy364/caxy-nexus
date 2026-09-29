@@ -1,293 +1,648 @@
+
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import Swal from 'sweetalert2';
 import { FaPlay, FaStop } from 'react-icons/fa';
-import { WS_SERVERS, isProduction } from '@/components/shared';
-import { contract_stages } from '@/constants/contract-stage';
+import Swal from 'sweetalert2';
 import { run_panel as run_panel_tabs } from '@/constants/run-panel';
+import { contract_stages } from '@/constants/contract-stage';
 import { observer } from '@/external/bot-skeleton';
 import { useStore } from '@/hooks/useStore';
 import './DualHighLowTicks.css';
 
-const DERIV_PUBLIC_WS_URL = isProduction() ? WS_SERVERS.PRODUCTION : WS_SERVERS.STAGING;
-const DERIV_OPTIONS_API_URL = DERIV_PUBLIC_WS_URL.replace(/ws\/public$/, '');
-const SYMBOL_OPTIONS = ['1HZ10V', 'R_10', '1HZ25V', 'R_25', '1HZ50V', 'R_50', '1HZ75V', 'R_75', '1HZ100V', 'R_100'];
-const TICK_DURATION = 5;
+const SYMBOL_OPTIONS = [
+    '1HZ10V', 'R_10',
+    '1HZ25V', 'R_25',
+    '1HZ50V', 'R_50',
+    '1HZ75V', 'R_75',
+    '1HZ100V', 'R_100',
+];
 
-// --- 1. MATHEMATICAL SIGNAL ENGINE ---
-class AutonomousSignalEngine {
-    constructor(volatilityThreshold, momentumThreshold) {
-        this.volatilityThreshold = volatilityThreshold;
-        this.momentumThreshold = momentumThreshold;
+const formatSymbolDisplay = (symbol) => {
+    if (!symbol) return '';
+    if (symbol.startsWith('1HZ')) {
+        return `${symbol.replace('1HZ', '').replace('V', '')}(1s)`;
     }
-
-    analyze(prices) {
-        if (prices.length < 20) return { phase: 'WAIT', tick: null, confidence: 0 };
-
-        const volatility = this.calculateVolatility(prices);
-        const momentum = this.calculateMomentum(prices);
-        const rsi = this.calculateRSI(prices, 14);
-
-        if (Math.abs(momentum) > this.momentumThreshold * 1.5 && volatility > this.volatilityThreshold) {
-            return { phase: 'BREAKOUT', tick: momentum > 0 ? 1 : 5, confidence: 0.8 };
-        }
-
-        if (rsi > 70 || rsi < 30) {
-            if (Math.abs(momentum) < this.momentumThreshold) {
-                return { phase: 'REVERSAL', tick: 3, confidence: 0.75 };
-            }
-        }
-
-        if (volatility > this.volatilityThreshold * 1.8) {
-            return { phase: 'IMPULSE', tick: 2, confidence: 0.65 };
-        }
-
-        return { phase: 'WAIT', tick: null, confidence: 0 };
+    if (symbol.startsWith('R_')) {
+        return `V${symbol.replace('R_', '')}`;
     }
+    return symbol;
+};
 
-    calculateVolatility(prices) {
-        const mean = prices.reduce((a, b) => a + b, 0) / prices.length;
-        return Math.sqrt(prices.map(x => Math.pow(x - mean, 2)).reduce((a, b) => a + b) / prices.length);
-    }
+const DualHighLowTicks = () => {
+    const store = useStore();
+    const { transactions, journal, summary_card, run_panel } = store || {};
 
-    calculateMomentum(prices) {
-        return prices[prices.length - 1] - prices[prices.length - 2];
-    }
-
-    calculateRSI(prices, period) {
-        const changes = [];
-        for (let i = 1; i < prices.length; i++) changes.push(prices[i] - prices[i - 1]);
-        const gains = changes.filter(c => c > 0).reduce((a, b) => a + b, 0);
-        const losses = Math.abs(changes.filter(c => c < 0).reduce((a, b) => a + b, 0));
-        if (losses === 0) return 50;
-        const rs = gains / losses;
-        return 100 - (100 / (1 + rs));
-    }
-}
-
-// --- 2. COMPONENT ---
-
-const DualHighLowTicksComponent = () => {
-    const store = useStore() || {};
-    const { transactions, journal, summary_card, run_panel, client } = store;
-
+    // Settings
     const [isRunning, setIsRunning] = useState(false);
-    const [selectedSymbol, setSelectedSymbol] = useState('R_50');
+    const [selectedSymbol, setSelectedSymbol] = useState('R_10');
+    const [duration, setDuration] = useState('5');
     const [stake, setStake] = useState('1');
     const [targetProfit, setTargetProfit] = useState('100');
     const [stopLoss, setStopLoss] = useState('100');
     const [martingaleMode, setMartingaleMode] = useState('net');
     const [mFactor, setMFactor] = useState('2.1');
-    const [error, setError] = useState('');
+
+    // Simulation display
     const [lastTickQuote, setLastTickQuote] = useState('-');
-    const [detectedPhase, setDetectedPhase] = useState('WAIT');
+    const [entryQuote, setEntryQuote] = useState('-');
+    const [tickCount, setTickCount] = useState(0);
+    const [totalProfit, setTotalProfit] = useState(0);
+    const [tradeCount, setTradeCount] = useState(0);
+    const [status, setStatus] = useState('Stopped');
+    const [error, setError] = useState('');
+    const [history, setHistory] = useState([]);
 
-    const wsRef = useRef(null);
+    const intervalRef = useRef(null);
     const isRunningRef = useRef(false);
-    const isAuthorizedRef = useRef(false);
-    const isConnectingRef = useRef(false);
-    const isProcessingRef = useRef(false);
+    const tickCountRef = useRef(0);
+    const entryQuoteRef = useRef(null);
+    const currentQuoteRef = useRef(1000);
     const totalProfitRef = useRef(0);
-    const activeContractsRef = useRef(new Set());
-    const completedContractsRef = useRef(new Set());
-    const contractMetaRef = useRef({});
-    const pendingTradeContextsRef = useRef([]);
-    const pendingProposalContextsRef = useRef(new Map());
-    const nextStakeRef = useRef({ TICKHIGH: 1, TICKLOW: 1 });
-    const priceBufferRef = useRef([]);
-    const signalEngineRef = useRef(new AutonomousSignalEngine(0.00005, 0.0001));
-
-    // --- API HANDLERS ---
-
-    const publishNativeContract = useCallback((contractData) => {
-        if (!transactions || !summary_card) return;
-        try {
-            transactions.onBotContractEvent?.(contractData);
-            summary_card.onBotContractEvent?.(contractData);
-        } catch (err) { console.error(err); }
-    }, [summary_card, transactions]);
+    const nextStakeRef = useRef({ HIGH: 1, LOW: 1 });
+    const tradeNumberRef = useRef(0);
+    const pairRef = useRef(null);
 
     const publishNativeError = useCallback((message) => {
-        if (journal?.onError) journal.onError(message);
+        if (journal?.onError) {
+            journal.onError(message);
+        }
     }, [journal]);
 
-    const stopTradingBot = useCallback((reason = 'Bot stopped.') => {
-        setIsRunning(false);
-        isRunningRef.current = false;
-        isProcessingRef.current = false;
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ forget_all: 'proposal' }));
+    const publishResult = useCallback((result) => {
+        if (journal?.onLogSuccess) {
+            journal.onLogSuccess({
+                log_type: result.profit >= 0 ? 'profit' : 'lost',
+                extra: {
+                    currency: 'USD',
+                    profit: result.profit,
+                },
+            });
         }
+    }, [journal]);
+
+    const publishContract = useCallback((contract) => {
+        if (transactions?.onBotContractEvent) {
+            transactions.onBotContractEvent(contract);
+        }
+        if (summary_card?.onBotContractEvent) {
+            summary_card.onBotContractEvent(contract);
+        }
+    }, [transactions, summary_card]);
+
+    const stopBot = useCallback((reason = 'Bot stopped.') => {
+        isRunningRef.current = false;
+        setIsRunning(false);
+        setStatus('Stopped');
+
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+        }
+
         run_panel?.setIsRunning?.(false);
-        setError(reason);
+        run_panel?.setHasOpenContract?.(false);
+        run_panel?.setContractStage?.(contract_stages.NOT_RUNNING);
+        run_panel?.toggleDrawer?.(true);
+        run_panel?.setActiveTabIndex?.(run_panel_tabs.TRANSACTIONS);
+
+        if (reason !== 'Bot stopped.') {
+            setError(reason);
+        }
     }, [run_panel]);
 
-    const executeTradePair = useCallback((autoTick) => {
-        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    const addHistory = useCallback((item) => {
+        setHistory((previous) => [item, ...previous].slice(0, 50));
+    }, []);
 
-        const highStake = Number((nextStakeRef.current.TICKHIGH || 1).toFixed(2));
-        const lowStake = Number((nextStakeRef.current.TICKLOW || 1).toFixed(2));
-        const groupId = `auto-hedge-${selectedSymbol}-${Date.now()}`;
+    const executePair = useCallback(() => {
+        if (!isRunningRef.current || pairRef.current) return;
 
-        const common = {
-            proposal: 1,
-            basis: 'stake',
-            currency: client?.currency || 'USD',
-            underlying_symbol: selectedSymbol,
-            duration: TICK_DURATION,
-            duration_unit: 't',
-            selected_tick: autoTick,
+        const currentStake = Number.parseFloat(stake || '1');
+        const highStake = Number(
+            nextStakeRef.current.HIGH.toFixed(2)
+        );
+        const lowStake = Number(
+            nextStakeRef.current.LOW.toFixed(2)
+        );
+
+        const entry = currentQuoteRef.current;
+        entryQuoteRef.current = entry;
+        tickCountRef.current = 0;
+
+        const pairId = `paper-pair-${Date.now()}`;
+        pairRef.current = {
+            id: pairId,
+            entry,
+            highStake,
+            lowStake,
+            symbol: selectedSymbol,
+            tickDuration: 5,
         };
 
-        ['TICKHIGH', 'TICKLOW'].forEach((type) => {
-            wsRef.current.send(JSON.stringify({
-                ...common,
-                amount: type === 'TICKHIGH' ? highStake : lowStake,
-                contract_type: type,
-                passthrough: {
-                    symbol: selectedSymbol,
-                    custom_type: type,
-                    sent_stake: type === 'TICKHIGH' ? highStake : lowStake,
-                    selected_tick: autoTick,
-                    group_id: groupId,
-                },
-            }));
+        setEntryQuote(entry.toFixed(5));
+        setTickCount(0);
+        setStatus('Pair running');
+
+        addHistory({
+            id: pairId,
+            type: 'PAIR STARTED',
+            entry: entry.toFixed(5),
+            symbol: selectedSymbol,
+            time: new Date().toLocaleTimeString(),
         });
-    }, [client?.currency, selectedSymbol]);
 
-    // --- WEBSOCKET LOGIC ---
+        run_panel?.setHasOpenContract?.(true);
+        run_panel?.setContractStage?.(contract_stages.PURCHASE_RECEIVED);
+    }, [stake, selectedSymbol, addHistory, run_panel]);
 
-    const handleSocketMessage = useCallback((event) => {
-        let data;
-        try { data = JSON.parse(event.data); } catch { return; }
+    const settlePair = useCallback((exitQuote) => {
+        const pair = pairRef.current;
+        if (!pair) return;
 
-        if (data.msg_type === 'tick') {
-            const quote = Number(data.tick?.quote);
-            if (Number.isFinite(quote)) {
-                setLastTickQuote(quote.toString());
-                priceBufferRef.current.push(quote);
-                if (priceBufferRef.current.length > 30) priceBufferRef.current.shift();
+        // Educational simulation only.
+        // The outcome is based on the simulated final quote.
+        const highWon = exitQuote > pair.entry;
+        const lowWon = exitQuote < pair.entry;
 
-                if (!isRunningRef.current || activeContractsRef.current.size > 0 || isProcessingRef.current) return;
+        const highProfit = highWon
+            ? pair.highStake
+            : -pair.highStake;
 
-                const signal = signalEngineRef.current.analyze(priceBufferRef.current);
-                if (signal.phase !== 'WAIT') {
-                    setDetectedPhase(signal.phase);
-                    isProcessingRef.current = true;
-                    executeTradePair(signal.tick);
-                } else {
-                    setDetectedPhase('SCANNING');
-                }
-            }
-        }
+        const lowProfit = lowWon
+            ? pair.lowStake
+            : -pair.lowStake;
 
-        // Handle Proposal, Buy, and Contract Completion
-        if (data.msg_type === 'proposal') {
-            // Logic to handle proposal...
-        }
-        if (data.msg_type === 'buy') {
-            // Logic to handle buy...
-        }
-        if (data.msg_type === 'proposal_open_contract') {
-            const contract = data.proposal_open_contract;
-            if (contract.status !== 'open' && contract.is_sold) {
-                // Handle completion and Martingale
-                activeContractsRef.current.delete(String(contract.contract_id));
-                isProcessingRef.current = false; // Reset for next signal
-            }
-        }
-    }, [executeTradePair]);
+        const pairProfit = highProfit + lowProfit;
 
-    const startBot = useCallback(async () => {
-        setIsRunning(true);
-        isRunningRef.current = true;
-        isProcessingRef.current = false;
-        setDetectedPhase('INITIALIZING');
-        
-        // Initialize WebSocket
-        wsRef.current = new WebSocket(DERIV_PUBLIC_WS_URL);
-        wsRef.current.onopen = () => {
-            isAuthorizedRef.current = true;
-            wsRef.current.send(JSON.stringify({ ticks: selectedSymbol, subscribe: 1 }));
+        totalProfitRef.current += pairProfit;
+        tradeNumberRef.current += 1;
+
+        const result = {
+            id: pair.id,
+            type: 'PAIR COMPLETED',
+            symbol: pair.symbol,
+            entry: pair.entry.toFixed(5),
+            exit: exitQuote.toFixed(5),
+            highResult: highWon ? 'Won' : 'Lost',
+            lowResult: lowWon ? 'Won' : 'Lost',
+            highProfit,
+            lowProfit,
+            profit: pairProfit,
+            time: new Date().toLocaleTimeString(),
         };
-        wsRef.current.onmessage = handleSocketMessage;
-        wsRef.current.onerror = () => setError('WS Error');
-        wsRef.current.onclose = () => setIsRunning(false);
-    }, [selectedSymbol, handleSocketMessage]);
+
+        setTotalProfit(totalProfitRef.current);
+        setTradeCount(tradeNumberRef.current);
+        addHistory(result);
+
+        publishResult(result);
+
+        publishContract({
+            id: pair.id,
+            contract_id: pair.id,
+            underlying: pair.symbol,
+            underlying_symbol: pair.symbol,
+            display_name: formatSymbolDisplay(pair.symbol),
+            contract_type: 'PAPER_HIGH_LOW_TICKS',
+            buy_price: pair.highStake + pair.lowStake,
+            currency: 'USD',
+            status: pairProfit >= 0 ? 'won' : 'lost',
+            result: pairProfit >= 0 ? 'won' : 'lost',
+            profit: pairProfit,
+            entry_spot: pair.entry,
+            exit_spot: exitQuote,
+            is_sold: true,
+            date_start: Math.floor(Date.now() / 1000),
+        });
+
+        // Apply the selected paper martingale mode.
+        if (martingaleMode === 'split') {
+            nextStakeRef.current.HIGH = highWon
+                ? Number.parseFloat(stake || '1')
+                : Number((pair.highStake * Number(mFactor || 1)).toFixed(2));
+
+            nextStakeRef.current.LOW = lowWon
+                ? Number.parseFloat(stake || '1')
+                : Number((pair.lowStake * Number(mFactor || 1)).toFixed(2));
+        } else {
+            if (pairProfit < 0) {
+                nextStakeRef.current.HIGH = Number(
+                    (pair.highStake * Number(mFactor || 1)).toFixed(2)
+                );
+                nextStakeRef.current.LOW = Number(
+                    (pair.lowStake * Number(mFactor || 1)).toFixed(2)
+                );
+            } else {
+                nextStakeRef.current = {
+                    HIGH: Number.parseFloat(stake || '1'),
+                    LOW: Number.parseFloat(stake || '1'),
+                };
+            }
+        }
+
+        pairRef.current = null;
+        entryQuoteRef.current = null;
+        tickCountRef.current = 0;
+        setTickCount(0);
+        setStatus('Waiting for next pair');
+
+        run_panel?.setHasOpenContract?.(false);
+        run_panel?.setContractStage?.(contract_stages.CONTRACT_CLOSED);
+
+        const profitLimit = Number.parseFloat(targetProfit || '0');
+        const lossLimit = Number.parseFloat(stopLoss || '0');
+
+        if (
+            totalProfitRef.current >= profitLimit ||
+            totalProfitRef.current <= -lossLimit
+        ) {
+            stopBot('Paper session ended at the configured profit/loss limit.');
+        }
+    }, [
+        addHistory,
+        martingaleMode,
+        mFactor,
+        publishContract,
+        publishResult,
+        run_panel,
+        stake,
+        stopBot,
+        stopLoss,
+        targetProfit,
+    ]);
+
+    const simulateTick = useCallback(() => {
+        if (!isRunningRef.current) return;
+
+        // Generate a simulated quote movement.
+        // This is not a live Deriv market price.
+        const movement = (Math.random() - 0.5) * 0.8;
+        currentQuoteRef.current = Math.max(
+            0.01,
+            currentQuoteRef.current + movement
+        );
+
+        const quote = currentQuoteRef.current;
+        setLastTickQuote(quote.toFixed(5));
+
+        if (!pairRef.current) {
+            executePair();
+            return;
+        }
+
+        tickCountRef.current += 1;
+        setTickCount(tickCountRef.current);
+
+        if (tickCountRef.current >= 5) {
+            settlePair(quote);
+        }
+    }, [executePair, settlePair]);
+
+    const startBot = useCallback(() => {
+        if (isRunningRef.current) {
+            stopBot();
+            return;
+        }
+
+        const stakeValue = Number.parseFloat(stake);
+        const targetValue = Number.parseFloat(targetProfit);
+        const lossValue = Number.parseFloat(stopLoss);
+        const multiplier = Number.parseFloat(mFactor);
+
+        if (!Number.isFinite(stakeValue) || stakeValue <= 0) {
+            setError('Enter a valid positive stake.');
+            return;
+        }
+
+        if (!Number.isFinite(targetValue) || targetValue <= 0) {
+            setError('Enter a valid positive target profit.');
+            return;
+        }
+
+        if (!Number.isFinite(lossValue) || lossValue <= 0) {
+            setError('Enter a valid positive stop loss.');
+            return;
+        }
+
+        if (!Number.isFinite(multiplier) || multiplier < 1) {
+            setError('Enter a multiplier of at least 1.');
+            return;
+        }
+
+        // The simulator uses a fixed five-tick duration.
+        setDuration('5');
+        setError('');
+        setHistory([]);
+        setTradeCount(0);
+        setTotalProfit(0);
+        setLastTickQuote('-');
+        setEntryQuote('-');
+        setTickCount(0);
+        setStatus('Starting simulation');
+
+        totalProfitRef.current = 0;
+        tickCountRef.current = 0;
+        tradeNumberRef.current = 0;
+        pairRef.current = null;
+        entryQuoteRef.current = null;
+
+        nextStakeRef.current = {
+            HIGH: stakeValue,
+            LOW: stakeValue,
+        };
+
+        isRunningRef.current = true;
+        setIsRunning(true);
+        setStatus('Running paper simulation');
+
+        if (transactions?.clear) transactions.clear();
+        if (summary_card?.clear) summary_card.clear();
+
+        run_panel?.setIsRunning?.(true);
+        run_panel?.setHasOpenContract?.(false);
+        run_panel?.setContractStage?.(contract_stages.STARTING);
+        if (run_panel) {
+            run_panel.run_id = `paper-high-low-${Date.now()}`;
+        }
+        run_panel?.toggleDrawer?.(true);
+        run_panel?.setActiveTabIndex?.(run_panel_tabs.TRANSACTIONS);
+
+        // Simulated tick interval. No trading API is connected.
+        intervalRef.current = setInterval(simulateTick, 1000);
+    }, [
+        mFactor,
+        simulateTick,
+        stake,
+        stopBot,
+        stopLoss,
+        summary_card,
+        targetProfit,
+        transactions,
+        run_panel,
+    ]);
+
+    useEffect(() => {
+        observer.register('dualhighlowticks.start', startBot);
+        observer.register('dualhighlowticks.stop', stopBot);
+
+        return () => {
+            if (observer.isRegistered('dualhighlowticks.start')) {
+                observer.unregister('dualhighlowticks.start', startBot);
+            }
+            if (observer.isRegistered('dualhighlowticks.stop')) {
+                observer.unregister('dualhighlowticks.stop', stopBot);
+            }
+        };
+    }, [startBot, stopBot]);
+
+    useEffect(() => {
+        const handleExternalStop = () => {
+            if (isRunningRef.current) {
+                stopBot('Simulation stopped from the run panel.');
+            }
+        };
+
+        observer.register('bot.click_stop', handleExternalStop);
+
+        return () => {
+            if (observer.isRegistered('bot.click_stop')) {
+                observer.unregister('bot.click_stop', handleExternalStop);
+            }
+        };
+    }, [stopBot]);
+
+    useEffect(() => {
+        return () => {
+            isRunningRef.current = false;
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+            }
+        };
+    }, []);
 
     return (
-        <div className='dhl-tool'>
+        <div className="dhl-tool">
             <header>
-                <h1>Autonomous Dual Hedge</h1>
-                <p>AI-driven volatility straddle. Automatically detects Trend, Impulse, or Reversal phases.</p>
+                <h1>Dual High / Low Ticks</h1>
+                <p>
+                    Paper-trading simulator for paired High and Low
+                    tick predictions, using a fixed five-tick duration.
+                </p>
+                <p className="dhl-warning">
+                    Simulation only. Quotes and results are not live
+                    Deriv market data or real contracts.
+                </p>
             </header>
 
-            <div className='dhl-settings'>
+            <div className="dhl-settings">
                 <label>
-                    Volatility Market
-                    <select value={selectedSymbol} onChange={(e) => setSelectedSymbol(e.target.value)} disabled={isRunning}>
+                    Volatility
+                    <select
+                        value={selectedSymbol}
+                        onChange={(e) => setSelectedSymbol(e.target.value)}
+                        disabled={isRunning}
+                    >
                         {SYMBOL_OPTIONS.map((symbol) => (
-                            <option key={symbol} value={symbol}>{symbol}</option>
+                            <option key={symbol} value={symbol}>
+                                {formatSymbolDisplay(symbol)}
+                            </option>
                         ))}
                     </select>
                 </label>
 
                 <label>
-                    Mode
-                    <select value={martingaleMode} onChange={(e) => setMartingaleMode(e.target.value)} disabled={isRunning}>
-                        <option value='net'>When BOTH lose</option>
-                        <option value='split'>On every loss</option>
+                    Duration
+                    <input
+                        type="number"
+                        value="5"
+                        disabled
+                        readOnly
+                    />
+                </label>
+
+                <label>
+                    Duration Unit
+                    <select value="t" disabled>
+                        <option value="t">Ticks</option>
                     </select>
                 </label>
 
                 <label>
-                    Stake (USD)
-                    <input type='number' step='0.01' value={stake} onChange={(e) => setStake(e.target.value)} disabled={isRunning} />
+                    Stake per side (USD)
+                    <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={stake}
+                        onChange={(e) => setStake(e.target.value)}
+                        disabled={isRunning}
+                    />
                 </label>
 
                 <label>
-                    Target Profit
-                    <input type='number' value={targetProfit} onChange={(e) => setTargetProfit(e.target.value)} disabled={isRunning} />
+                    Target Profit (USD)
+                    <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={targetProfit}
+                        onChange={(e) => setTargetProfit(e.target.value)}
+                        disabled={isRunning}
+                    />
                 </label>
 
                 <label>
-                    Stop Loss
-                    <input type='number' value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} disabled={isRunning} />
+                    Stop Loss (USD)
+                    <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={stopLoss}
+                        onChange={(e) => setStopLoss(e.target.value)}
+                        disabled={isRunning}
+                    />
+                </label>
+
+                <label>
+                    Martingale Mode
+                    <select
+                        value={martingaleMode}
+                        onChange={(e) => setMartingaleMode(e.target.value)}
+                        disabled={isRunning}
+                    >
+                        <option value="net">When both sides lose</option>
+                        <option value="split">Manage each side separately</option>
+                    </select>
                 </label>
 
                 <label>
                     Multiplier
-                    <input type='number' step='0.1' value={mFactor} onChange={(e) => setMFactor(e.target.value)} disabled={isRunning} />
+                    <input
+                        type="number"
+                        min="1"
+                        step="0.1"
+                        value={mFactor}
+                        onChange={(e) => setMFactor(e.target.value)}
+                        disabled={isRunning}
+                    />
                 </label>
-            </div >
+            </div>
 
-            <button type='button' className={isRunning ? 'stop' : ''} onClick={startBot}>
-                {isRunning ? <FaStop /> : <FaPlay />} {isRunning ? ' STOP BOT' : ' START AUTONOMOUS BOT'}
+            <div className="dhl-contract-pair">
+                <div className="dhl-side-card">
+                    <h3>HIGH TICK</h3>
+                    <p>Simulated final quote above entry</p>
+                    <strong>
+                        ${nextStakeRef.current.HIGH.toFixed(2)}
+                    </strong>
+                </div>
+
+                <div className="dhl-side-card">
+                    <h3>LOW TICK</h3>
+                    <p>Simulated final quote below entry</p>
+                    <strong>
+                        ${nextStakeRef.current.LOW.toFixed(2)}
+                    </strong>
+                </div>
+            </div>
+
+            <button
+                type="button"
+                className={isRunning ? 'stop' : ''}
+                onClick={startBot}
+            >
+                {isRunning ? <FaStop /> : <FaPlay />}
+                {isRunning ? ' STOP SIMULATION' : ' START SIMULATION'}
             </button>
 
-            <div className='dhl-live-box'>
+            <div className="dhl-live-box">
                 <div>
-                    <span>Market Status</span>
-                    <strong style={{ color: isRunning ? '#4caf50' : '#f44336' }}>{isRunning ? 'RUNNING' : 'IDLE'}</strong>
-                </div >
-                <div>
-                    <span>Detected Phase</span>
-                    <strong style={{ color: '#ff9800' }}>{detectedPhase}</strong>
-                </div >
-                <div>
-                    <span>Last Quote</span>
-                    <strong>{lastTickQuote}</strong>
-                </div >
-                <div>
-                    <span>Total P/L</span>
-                    <strong className={totalProfitRef.current >= 0 ? 'profit' : 'loss'}>
-                        {totalProfitRef.current.toFixed(2)} USD
-                    </strong>
-                </div >
-            </div >
+                    <span>Market</span>
+                    <strong>{formatSymbolDisplay(selectedSymbol)}</strong>
+                </div>
 
-            {error && <p className='dhl-error'>{error}</p>}
-        </div >
+                <div>
+                    <span>Duration</span>
+                    <strong>5 ticks</strong>
+                </div>
+
+                <div>
+                    <span>Entry Quote</span>
+                    <strong>{entryQuote}</strong>
+                </div>
+
+                <div>
+                    <span>Latest Simulated Quote</span>
+                    <strong>{lastTickQuote}</strong>
+                </div>
+
+                <div>
+                    <span>Tick Progress</span>
+                    <strong>{tickCount} / 5</strong>
+                </div>
+
+                <div>
+                    <span>Completed Pairs</span>
+                    <strong>{tradeCount}</strong>
+                </div>
+
+                <div>
+                    <span>Session P/L</span>
+                    <strong className={totalProfit >= 0 ? 'profit' : 'loss'}>
+                        {totalProfit.toFixed(2)} USD
+                    </strong>
+                </div>
+
+                <div>
+                    <span>Status</span>
+                    <strong>{status}</strong>
+                </div>
+            </div>
+
+            {error && <p className="dhl-error">{error}</p>}
+
+            <section className="dhl-history">
+                <h2>Simulation History</h2>
+
+                {history.length === 0 ? (
+                    <p>No simulated pairs yet.</p>
+                ) : (
+                    <div className="dhl-history-table-wrap">
+                        <table className="dhl-history-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Event</th>
+                                    <th>Entry</th>
+                                    <th>Exit</th>
+                                    <th>High</th>
+                                    <th>Low</th>
+                                    <th>Pair P/L</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {history.map((item) => (
+                                    <tr key={item.id}>
+                                        <td>{item.time}</td>
+                                        <td>{item.type}</td>
+                                        <td>{item.entry || '-'}</td>
+                                        <td>{item.exit || '-'}</td>
+                                        <td>{item.highResult || '-'}</td>
+                                        <td>{item.lowResult || '-'}</td>
+                                        <td>
+                                            {item.profit !== undefined
+                                                ? `${item.profit.toFixed(2)} USD`
+                                                : '-'}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </section>
+        </div>
     );
 };
 
-export default DualHighLowTicksComponent;
+export default DualHighLowTicks;
